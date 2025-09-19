@@ -1,0 +1,1719 @@
+const form = document.getElementById("searchForm");
+const usernameInput = document.getElementById("usernameInput");
+const statusArea = document.getElementById("statusArea");
+const resultsGrid = document.getElementById("resultsGrid");
+const historyList = document.getElementById("historyList");
+const clearBtn = document.getElementById("clearBtn");
+
+// Bulk search elements
+const bulkInput = document.getElementById("bulkInput");
+const bulkType = document.getElementById("bulkType");
+const bulkSearchBtn = document.getElementById("bulkSearchBtn");
+const exportSection = document.getElementById("exportSection");
+const exportJson = document.getElementById("exportJson");
+const exportCsv = document.getElementById("exportCsv");
+const exportStatus = document.getElementById("exportStatus");
+
+// Watchlist and filtering elements
+const watchlistInput = document.getElementById("watchlistInput");
+const addToWatchlist = document.getElementById("addToWatchlist");
+const watchlistItems = document.getElementById("watchlistItems");
+const monitorWatchlist = document.getElementById("monitorWatchlist");
+const filterBtns = document.querySelectorAll(".filter-btn");
+const sortHistory = document.getElementById("sortHistory");
+const totalSearches = document.getElementById("totalSearches");
+const foundResults = document.getElementById("foundResults");
+
+// Global variables
+let currentBulkResults = null;
+let allHistory = [];
+let currentFilter = "all";
+let currentSort = "recent";
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text) e.textContent = text;
+  return e;
+}
+
+async function fetchHistory() {
+  historyList.innerHTML = "<div class='text-muted'>Loading...</div>";
+  try {
+    const res = await fetch("/api/history");
+    const j = await res.json();
+    allHistory = j.history || [];
+    
+    // Update stats
+    updateStats();
+    
+    // Apply current filter and sort
+    displayFilteredHistory();
+    
+  } catch (e) {
+    historyList.innerHTML = "<div class='text-danger'>Failed to load history</div>";
+  }
+}
+
+function updateStats() {
+  totalSearches.textContent = allHistory.length;
+  
+  // Count found results (simplified estimation)
+  let foundCount = 0;
+  allHistory.forEach(item => {
+    const result = item.result;
+    if (result && typeof result === 'object') {
+      if (result.type === 'username' && result.username_results) {
+        const platforms = Object.values(result.username_results);
+        foundCount += platforms.filter(p => p.exists).length;
+      } else if (result.ok || result.type) {
+        foundCount++;
+      }
+    }
+  });
+  foundResults.textContent = foundCount;
+}
+
+function getItemType(item) {
+  const result = item.result;
+  if (result && result.type) {
+    return result.type;
+  }
+  // Fallback detection
+  const username = item.username;
+  if (username.includes('@')) return 'email';
+  if (username.match(/^\+?\d+/)) return 'phone';
+  if (username.match(/^\d+\.\d+\.\d+\.\d+$/)) return 'ip'; // IPv4
+  if (username.match(/^[0-9a-fA-F:]+$/) && username.includes(':')) return 'ip'; // IPv6
+  if (username.includes(' ') && username.split(' ').length >= 2) return 'name';
+  return 'username';
+}
+
+function displayFilteredHistory() {
+  historyList.innerHTML = "";
+  
+  if (allHistory.length === 0) {
+    historyList.innerHTML = "<div class='text-muted'>No recent searches.</div>";
+    return;
+  }
+  
+  // Filter history
+  let filteredHistory = allHistory;
+  if (currentFilter !== "all") {
+    filteredHistory = allHistory.filter(item => getItemType(item) === currentFilter);
+  }
+  
+  // Sort history
+  filteredHistory.sort((a, b) => {
+    switch (currentSort) {
+      case "oldest":
+        return new Date(a.checked_at) - new Date(b.checked_at);
+      case "alphabetical":
+        return a.username.localeCompare(b.username);
+      case "type":
+        return getItemType(a).localeCompare(getItemType(b));
+      default: // recent
+        return new Date(b.checked_at) - new Date(a.checked_at);
+    }
+  });
+  
+  // Display history
+  filteredHistory.forEach(item => {
+    const row = el("div", "history-item mb-2 p-2 border rounded");
+    const t = new Date(item.checked_at).toLocaleString();
+    const itemType = getItemType(item);
+    const typeIcon = {
+      email: "fa-envelope",
+      phone: "fa-phone",
+      name: "fa-user",
+      username: "fa-at",
+      ip: "fa-globe"
+    }[itemType] || "fa-search";
+    
+    row.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start">
+        <div style="flex: 1;">
+          <div class="d-flex align-items-center gap-1">
+            <i class="fa-solid ${typeIcon}" style="color: #6c757d;"></i>
+            <strong>${item.username}</strong>
+            <span class="badge bg-light text-dark">${itemType}</span>
+          </div>
+          <div class="text-muted small">${t}</div>
+        </div>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm btn-outline-primary" onclick="renderResults('${item.username}', ${JSON.stringify(item.result).replace(/"/g, '&quot;')})">
+            <i class="fa-solid fa-eye"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-success" onclick="addItemToWatchlist('${item.username}')">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    row.style.cursor = "pointer";
+    row.onclick = (e) => {
+      if (!e.target.closest('button')) {
+        renderResults(item.username, item.result);
+      }
+    };
+    historyList.appendChild(row);
+  });
+  
+  if (filteredHistory.length === 0) {
+    historyList.innerHTML = `<div class='text-muted'>No ${currentFilter} searches found.</div>`;
+  }
+}
+
+function clearResults() {
+  resultsGrid.innerHTML = "";
+  statusArea.innerHTML = "";
+}
+
+function renderResults(username, resultObj) {
+  clearResults();
+  const title = el("div", "mb-2");
+  title.innerHTML = `<h5>Results for <code>${username}</code></h5>`;
+  statusArea.appendChild(title);
+
+  // Check result type
+  if (resultObj.type === "email") {
+    renderEmailResults(resultObj);
+    return;
+  } else if (resultObj.type === "phone") {
+    renderPhoneResults(resultObj);
+    return;
+  } else if (resultObj.type === "ip") {
+    renderIPResults(resultObj);
+    return;
+  } else if (resultObj.type === "name") {
+    renderNameResults(resultObj);
+    return;
+  } else if (resultObj.type === "enhanced_username") {
+    renderEnhancedUsernameResults(resultObj);
+    return;
+  } else if (resultObj.type === "username") {
+    // Handle username results with type wrapper
+    renderUsernameResults(resultObj.username_results, username);
+    return;
+  }
+
+  // Handle direct username results (legacy format)
+  renderUsernameResults(resultObj, username);
+}
+
+function renderUsernameResults(usernameData, username) {
+  // Handle username results (social media platforms)
+  for (const [platform, info] of Object.entries(usernameData)) {
+    const card = el("div", "card card-platform p-2 shadow-sm");
+    const body = el("div", "card-body p-2");
+    const row = el("div", "d-flex justify-content-between align-items-start");
+    const left = el("div", "");
+    left.innerHTML = `<div style="font-weight:600">${platform}</div>
+                      <div class="text-muted" style="font-size:0.85rem">${info.url || 'N/A'}</div>`;
+    const right = el("div", "");
+    if (info.exists) {
+      right.innerHTML = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> Found</div>
+                         <a class="btn btn-sm btn-outline-primary mt-2" target="_blank" href="${info.url}"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>`;
+    } else {
+      right.innerHTML = `<div class="result-no"><i class="fa-regular fa-circle-xmark"></i> Not found</div>`;
+    }
+    row.appendChild(left);
+    row.appendChild(right);
+    body.appendChild(row);
+    card.appendChild(body);
+    resultsGrid.appendChild(card);
+  }
+  
+  // Add Enhanced Analysis button for username results
+  const enhancedBtn = el("div", "text-center mt-3");
+  enhancedBtn.innerHTML = `<button class="btn btn-outline-success" onclick="runEnhancedAnalysis('${username}')">
+                             <i class="fa-solid fa-search-plus"></i> Run Enhanced Social Media Analysis
+                           </button>`;
+  resultsGrid.appendChild(enhancedBtn);
+}
+
+function renderEnhancedUsernameResults(resultObj) {
+  const enhancedCheck = resultObj.enhanced_check;
+  
+  if (!enhancedCheck.username) {
+    const card = el("div", "card card-platform p-2 shadow-sm");
+    const body = el("div", "card-body p-2");
+    body.innerHTML = `<div class="text-danger"><i class="fa-solid fa-exclamation-triangle"></i> Enhanced analysis failed</div>`;
+    card.appendChild(body);
+    resultsGrid.appendChild(card);
+    return;
+  }
+  
+  const data = enhancedCheck;
+  
+  // Investigation Summary Card
+  const summaryCard = el("div", "card card-platform p-2 shadow-sm bg-light");
+  const summaryBody = el("div", "card-body p-2");
+  const summaryRow = el("div", "d-flex justify-content-between align-items-start");
+  const summaryLeft = el("div", "");
+  summaryLeft.innerHTML = `<div style="font-weight:600">📊 Investigation Summary</div>
+                           <div class="text-muted" style="font-size:0.85rem">Enhanced social media analysis results</div>`;
+  const summaryRight = el("div", "");
+  summaryRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-chart-line"></i> Analysis Complete</div>
+                            <div class="text-muted mt-2" style="font-size: 0.9rem;">
+                              <strong>Found:</strong> ${data.investigation_summary.platforms_found}/${data.investigation_summary.total_platforms_checked} platforms<br>
+                              <strong>Patterns:</strong> ${data.investigation_summary.correlation_patterns} correlations<br>
+                              <strong>Username:</strong> ${data.username}
+                            </div>`;
+  summaryRow.appendChild(summaryLeft);
+  summaryRow.appendChild(summaryRight);
+  summaryBody.appendChild(summaryRow);
+  summaryCard.appendChild(summaryBody);
+  resultsGrid.appendChild(summaryCard);
+
+  // Add Export Button
+  const exportButton = el("button", "btn btn-primary mt-2 mb-3");
+  exportButton.innerHTML = '<i class="fa-solid fa-download"></i> Export Results';
+  exportButton.style.cssText = 'width: 100%; background: linear-gradient(45deg, #28a745, #20c997); border: none;';
+  exportButton.onclick = () => exportResult(data, 'username', data.username);
+  resultsGrid.appendChild(exportButton);
+  
+  // Enhanced Platform Results
+  for (const [platform, info] of Object.entries(data.platform_results)) {
+    const card = el("div", "card card-platform p-2 shadow-sm");
+    const body = el("div", "card-body p-2");
+    const row = el("div", "d-flex justify-content-between align-items-start");
+    const left = el("div", "");
+    left.innerHTML = `<div style="font-weight:600">${platform}</div>
+                      <div class="text-muted" style="font-size:0.85rem">${info.url || 'N/A'}</div>`;
+    const right = el("div", "");
+    
+    if (info.exists) {
+      const engagement = info.engagement_metrics || {};
+      const accountAge = info.account_age || {};
+      
+      right.innerHTML = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> Found + Enhanced Data</div>
+                         <div class="text-muted mt-2" style="font-size: 0.85rem;">
+                           ${accountAge.estimated_creation ? `<strong>📅 Est. Created:</strong> ${accountAge.estimated_creation}<br>` : ''}
+                           ${engagement.estimated_followers ? `<strong>👥 Est. Followers:</strong> ${engagement.estimated_followers.toLocaleString()}<br>` : ''}
+                           ${engagement.activity_level ? `<strong>📈 Activity:</strong> ${engagement.activity_level}<br>` : ''}
+                           <a class="btn btn-sm btn-outline-primary mt-1" target="_blank" href="${info.url}">
+                             <i class="fa-solid fa-arrow-up-right-from-square"></i> Visit
+                           </a>
+                         </div>`;
+    } else {
+      right.innerHTML = `<div class="result-no"><i class="fa-regular fa-circle-xmark"></i> Not found</div>`;
+    }
+    
+    row.appendChild(left);
+    row.appendChild(right);
+    body.appendChild(row);
+    card.appendChild(body);
+    resultsGrid.appendChild(card);
+  }
+  
+  // Cross-Platform Correlation Analysis
+  if (data.cross_platform_analysis && data.cross_platform_analysis.length > 0) {
+    const correlationCard = el("div", "card card-platform p-2 shadow-sm");
+    const correlationBody = el("div", "card-body p-2");
+    const correlationRow = el("div", "d-flex justify-content-between align-items-start");
+    const correlationLeft = el("div", "");
+    correlationLeft.innerHTML = `<div style="font-weight:600">🔗 Cross-Platform Analysis</div>
+                                 <div class="text-muted" style="font-size:0.85rem">Username patterns and correlations</div>`;
+    const correlationRight = el("div", "");
+    
+    const correlationsHtml = data.cross_platform_analysis.map(corr => `
+      <div class="mb-2">
+        <strong>${corr.pattern}:</strong> ${corr.description}<br>
+        <div class="mt-1">
+          ${corr.suggestions.map(s => `<span class="badge bg-info text-dark me-1">${s}</span>`).join('')}
+        </div>
+      </div>
+    `).join('');
+    
+    correlationRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-project-diagram"></i> ${data.cross_platform_analysis.length} Patterns</div>
+                                  <div class="text-muted mt-2" style="font-size: 0.85rem;">
+                                    ${correlationsHtml}
+                                  </div>`;
+    
+    correlationRow.appendChild(correlationLeft);
+    correlationRow.appendChild(correlationRight);
+    correlationBody.appendChild(correlationRow);
+    correlationCard.appendChild(correlationBody);
+    resultsGrid.appendChild(correlationCard);
+  }
+}
+
+function renderEmailResults(resultObj) {
+  const emailCheck = resultObj.email_check;
+  
+  if (!emailCheck.ok) {
+    // Show error
+    const card = el("div", "card card-platform p-2 shadow-sm");
+    const body = el("div", "card-body p-2");
+    body.innerHTML = `<div class="text-danger"><i class="fa-solid fa-exclamation-triangle"></i> ${emailCheck.error}</div>`;
+    card.appendChild(body);
+    resultsGrid.appendChild(card);
+    return;
+  }
+  
+  const data = emailCheck.data;
+  
+  // Main Email Overview Card
+  const overviewCard = el("div", "card card-platform p-2 shadow-sm");
+  const overviewBody = el("div", "card-body p-2");
+  const overviewRow = el("div", "d-flex justify-content-between align-items-start");
+  const overviewLeft = el("div", "");
+  overviewLeft.innerHTML = `<div style="font-weight:600">📧 Enhanced Email Investigation</div>
+                           <div class="text-muted" style="font-size:0.85rem">Comprehensive OSINT analysis</div>`;
+  const overviewRight = el("div", "");
+  
+  let overviewInfo = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> Valid Email Format</div>`;
+  overviewInfo += `<div class="text-muted mt-2" style="font-size: 0.9rem;">
+                    <strong>📧 Email:</strong> ${data.email}<br>
+                    <strong>👤 Local:</strong> ${data.local_part}<br>
+                    <strong>🌐 Domain:</strong> ${data.domain}`;
+  
+  // Add validation sources badge
+  if (data.validation_sources && data.validation_sources.length > 0) {
+    overviewInfo += `<br><div class="mt-2">
+                      <small class="badge bg-info me-1">Sources: ${data.validation_sources.slice(0, 3).join(', ')}</small>
+                    </div>`;
+  }
+  overviewInfo += `</div>`;
+  
+  overviewRight.innerHTML = overviewInfo;
+  overviewRow.appendChild(overviewLeft);
+  overviewRow.appendChild(overviewRight);
+  overviewBody.appendChild(overviewRow);
+  overviewCard.appendChild(overviewBody);
+  resultsGrid.appendChild(overviewCard);
+  
+  // Enhanced Domain Analysis Card
+  if (data.domain_analysis) {
+    const domainCard = el("div", "card card-platform p-2 shadow-sm");
+    const domainBody = el("div", "card-body p-2");
+    const domainToggle = el("div", "d-flex justify-content-between align-items-center cursor-pointer");
+    domainToggle.setAttribute("data-bs-toggle", "collapse");
+    domainToggle.setAttribute("data-bs-target", "#domainDetails");
+    
+    const domainLeft = el("div", "");
+    domainLeft.innerHTML = `<div style="font-weight:600">🌐 Domain Analysis</div>
+                           <div class="text-muted" style="font-size:0.85rem">Provider type and security analysis</div>`;
+    
+    const domainRight = el("div", "");
+    const domainData = data.domain_analysis;
+    const providerType = domainData.provider_type || 'Unknown';
+    const reputation = domainData.domain_reputation || 'Unknown';
+    
+    let domainStatus = '';
+    if (domainData.is_disposable) {
+      domainStatus = `<div class="result-no"><i class="fa-solid fa-exclamation-triangle"></i> Disposable Email</div>`;
+    } else if (domainData.is_educational) {
+      domainStatus = `<div class="result-yes"><i class="fa-solid fa-graduation-cap"></i> Educational Domain</div>`;
+    } else if (domainData.is_government) {
+      domainStatus = `<div class="result-yes"><i class="fa-solid fa-landmark"></i> Government Domain</div>`;
+    } else if (domainData.is_corporate) {
+      domainStatus = `<div class="result-yes"><i class="fa-solid fa-building"></i> Corporate Domain</div>`;
+    } else {
+      domainStatus = `<div class="result-maybe"><i class="fa-solid fa-info-circle"></i> Personal Domain</div>`;
+    }
+    
+    domainRight.innerHTML = domainStatus + 
+                           `<div class="text-muted mt-1" style="font-size: 0.85rem;">
+                             <i class="fa-solid fa-chevron-down"></i> Click for details
+                           </div>`;
+    
+    domainToggle.appendChild(domainLeft);
+    domainToggle.appendChild(domainRight);
+    domainBody.appendChild(domainToggle);
+    
+    // Collapsible domain details
+    const domainDetails = el("div", "collapse mt-3");
+    domainDetails.id = "domainDetails";
+    domainDetails.innerHTML = `
+      <div class="bg-light p-2 rounded" style="font-size: 0.9rem;">
+        <strong>Provider Type:</strong> ${providerType}<br>
+        <strong>Reputation:</strong> ${reputation}<br>
+        <strong>Mail Service:</strong> ${domainData.has_mail_service ? 'Active' : 'Unknown'}<br>
+        <strong>Disposable:</strong> ${domainData.is_disposable ? 'Yes' : 'No'}<br>
+        <strong>Educational:</strong> ${domainData.is_educational ? 'Yes' : 'No'}<br>
+        <strong>Government:</strong> ${domainData.is_government ? 'Yes' : 'No'}<br>
+        <strong>Corporate:</strong> ${domainData.is_corporate ? 'Yes' : 'No'}
+      </div>`;
+    domainBody.appendChild(domainDetails);
+    domainCard.appendChild(domainBody);
+    resultsGrid.appendChild(domainCard);
+  }
+  
+  // Risk Assessment Card
+  if (data.risk_assessment) {
+    const riskCard = el("div", "card card-platform p-2 shadow-sm");
+    const riskBody = el("div", "card-body p-2");
+    const riskRow = el("div", "d-flex justify-content-between align-items-start");
+    const riskLeft = el("div", "");
+    riskLeft.innerHTML = `<div style="font-weight:600">⚠️ Risk Assessment</div>
+                         <div class="text-muted" style="font-size:0.85rem">Security and trust analysis</div>`;
+    
+    const riskRight = el("div", "");
+    const riskData = data.risk_assessment;
+    const riskLevel = riskData.risk_level || 'Unknown';
+    const trustScore = riskData.trust_score || 0;
+    
+    let riskColor = 'result-yes';
+    let riskIcon = 'shield-check';
+    if (riskLevel === 'High') {
+      riskColor = 'result-no';
+      riskIcon = 'exclamation-triangle';
+    } else if (riskLevel === 'Medium') {
+      riskColor = 'result-maybe';
+      riskIcon = 'exclamation-circle';
+    }
+    
+    let riskInfo = `<div class="${riskColor}"><i class="fa-solid fa-${riskIcon}"></i> ${riskLevel} Risk</div>`;
+    riskInfo += `<div class="text-muted mt-2" style="font-size: 0.9rem;">
+                  <strong>Trust Score:</strong> ${trustScore}%<br>`;
+    
+    if (riskData.risk_factors && riskData.risk_factors.length > 0) {
+      riskInfo += `<strong>Risk Factors:</strong><br>`;
+      riskData.risk_factors.slice(0, 3).forEach(factor => {
+        riskInfo += `• ${factor}<br>`;
+      });
+    }
+    riskInfo += `</div>`;
+    
+    riskRight.innerHTML = riskInfo;
+    riskRow.appendChild(riskLeft);
+    riskRow.appendChild(riskRight);
+    riskBody.appendChild(riskRow);
+    riskCard.appendChild(riskBody);
+    resultsGrid.appendChild(riskCard);
+  }
+  
+  // Enhanced Social Media Presence Card
+  if (data.social_media_presence) {
+    const socialCard = el("div", "card card-platform p-2 shadow-sm");
+    const socialBody = el("div", "card-body p-2");
+    const socialToggle = el("div", "d-flex justify-content-between align-items-center cursor-pointer");
+    socialToggle.setAttribute("data-bs-toggle", "collapse");
+    socialToggle.setAttribute("data-bs-target", "#socialDetails");
+    
+    const socialLeft = el("div", "");
+    socialLeft.innerHTML = `<div style="font-weight:600">👤 Social Media Analysis</div>
+                           <div class="text-muted" style="font-size:0.85rem">Profile discovery and association</div>`;
+    
+    const socialRight = el("div", "");
+    const socialData = data.social_media_presence;
+    const gravatarFound = socialData.gravatar && socialData.gravatar.found;
+    
+    let socialStatus = '';
+    if (gravatarFound) {
+      socialStatus = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> Gravatar Found</div>`;
+    } else {
+      socialStatus = `<div class="result-no"><i class="fa-regular fa-circle-xmark"></i> No Gravatar</div>`;
+    }
+    
+    socialRight.innerHTML = socialStatus + 
+                           `<div class="text-muted mt-1" style="font-size: 0.85rem;">
+                             <i class="fa-solid fa-chevron-down"></i> Click for details
+                           </div>`;
+    
+    socialToggle.appendChild(socialLeft);
+    socialToggle.appendChild(socialRight);
+    socialBody.appendChild(socialToggle);
+    
+    // Collapsible social details
+    const socialDetails = el("div", "collapse mt-3");
+    socialDetails.id = "socialDetails";
+    
+    let socialDetailsContent = `<div class="bg-light p-2 rounded" style="font-size: 0.9rem;">`;
+    
+    // Gravatar info
+    if (gravatarFound) {
+      socialDetailsContent += `<strong>Gravatar:</strong> <a href="${socialData.gravatar.profile_url}" target="_blank" class="btn btn-sm btn-outline-primary ms-2">View Profile</a><br>`;
+    }
+    
+    // Username variations
+    if (socialData.username_variations && socialData.username_variations.length > 0) {
+      socialDetailsContent += `<strong>Username Variations:</strong> ${socialData.username_variations.slice(0, 3).join(', ')}<br>`;
+    }
+    
+    // Platform likelihood
+    if (socialData.platform_likely_presence) {
+      socialDetailsContent += `<strong>Platform Presence Likelihood:</strong><br>`;
+      Object.entries(socialData.platform_likely_presence).slice(0, 4).forEach(([platform, info]) => {
+        const confidence = info.confidence || 'Unknown';
+        const likely = info.likely ? '✓' : '✗';
+        socialDetailsContent += `${likely} ${platform} (${confidence})<br>`;
+      });
+    }
+    
+    socialDetailsContent += `</div>`;
+    socialDetails.innerHTML = socialDetailsContent;
+    socialBody.appendChild(socialDetails);
+    socialCard.appendChild(socialBody);
+    resultsGrid.appendChild(socialCard);
+  }
+  
+  // Breach Intelligence Card
+  if (data.breach_intelligence) {
+    const breachCard = el("div", "card card-platform p-2 shadow-sm");
+    const breachBody = el("div", "card-body p-2");
+    const breachRow = el("div", "d-flex justify-content-between align-items-start");
+    const breachLeft = el("div", "");
+    breachLeft.innerHTML = `<div style="font-weight:600">🔒 Breach Intelligence</div>
+                           <div class="text-muted" style="font-size:0.85rem">Data breach exposure analysis</div>`;
+    
+    const breachRight = el("div", "");
+    const breachData = data.breach_intelligence;
+    const riskLevel = breachData.estimated_breach_risk || 'Unknown';
+    
+    let breachColor = 'result-yes';
+    let breachIcon = 'shield-check';
+    if (riskLevel === 'High') {
+      breachColor = 'result-no';
+      breachIcon = 'exclamation-triangle';
+    } else if (riskLevel === 'Medium') {
+      breachColor = 'result-maybe';
+      breachIcon = 'exclamation-circle';
+    }
+    
+    let breachInfo = `<div class="${breachColor}"><i class="fa-solid fa-${breachIcon}"></i> ${riskLevel} Risk</div>`;
+    breachInfo += `<div class="text-muted mt-2" style="font-size: 0.9rem;">`;
+    
+    if (breachData.common_breach_sources && breachData.common_breach_sources.length > 0) {
+      breachInfo += `<strong>Common Sources:</strong><br>`;
+      breachData.common_breach_sources.slice(0, 3).forEach(source => {
+        breachInfo += `• ${source}<br>`;
+      });
+    }
+    
+    breachInfo += `<small>${breachData.breach_analysis || 'Analysis not available'}</small>`;
+    breachInfo += `</div>`;
+    
+    breachRight.innerHTML = breachInfo;
+    breachRow.appendChild(breachLeft);
+    breachRow.appendChild(breachRight);
+    breachBody.appendChild(breachRow);
+    breachCard.appendChild(breachBody);
+    resultsGrid.appendChild(breachCard);
+  }
+  
+  // Professional Analysis Card
+  if (data.professional_analysis) {
+    const profCard = el("div", "card card-platform p-2 shadow-sm");
+    const profBody = el("div", "card-body p-2");
+    const profRow = el("div", "d-flex justify-content-between align-items-start");
+    const profLeft = el("div", "");
+    profLeft.innerHTML = `<div style="font-weight:600">💼 Professional Analysis</div>
+                         <div class="text-muted" style="font-size:0.85rem">Business and contact classification</div>`;
+    
+    const profRight = el("div", "");
+    const profData = data.professional_analysis;
+    const contactType = profData.contact_type || 'Unknown';
+    const businessLikelihood = profData.business_likelihood || 'Unknown';
+    
+    let profStatus = '';
+    if (profData.is_corporate || profData.is_educational || profData.is_government) {
+      profStatus = `<div class="result-yes"><i class="fa-solid fa-building"></i> Business Email</div>`;
+    } else {
+      profStatus = `<div class="result-maybe"><i class="fa-solid fa-user"></i> Personal Email</div>`;
+    }
+    
+    profStatus += `<div class="text-muted mt-2" style="font-size: 0.9rem;">
+                    <strong>Contact Type:</strong> ${contactType}<br>
+                    <strong>Business Likelihood:</strong> ${businessLikelihood}<br>
+                    <strong>Likely Role:</strong> ${profData.likely_role || 'Unknown'}
+                  </div>`;
+    
+    profRight.innerHTML = profStatus;
+    profRow.appendChild(profLeft);
+    profRow.appendChild(profRight);
+    profBody.appendChild(profRow);
+    profCard.appendChild(profBody);
+    resultsGrid.appendChild(profCard);
+  }
+  
+  // OSINT Search URLs Card
+  if (data.osint_search_urls) {
+    const osintCard = el("div", "card card-platform p-2 shadow-sm");
+    const osintBody = el("div", "card-body p-2");
+    const osintToggle = el("div", "d-flex justify-content-between align-items-center cursor-pointer");
+    osintToggle.setAttribute("data-bs-toggle", "collapse");
+    osintToggle.setAttribute("data-bs-target", "#osintUrls");
+    
+    const osintLeft = el("div", "");
+    osintLeft.innerHTML = `<div style="font-weight:600">🔍 OSINT Search URLs</div>
+                          <div class="text-muted" style="font-size:0.85rem">Comprehensive investigation resources</div>`;
+    
+    const osintRight = el("div", "");
+    osintRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-external-link-alt"></i> Search Resources Available</div>
+                           <div class="text-muted mt-1" style="font-size: 0.85rem;">
+                             <i class="fa-solid fa-chevron-down"></i> Click to view URLs
+                           </div>`;
+    
+    osintToggle.appendChild(osintLeft);
+    osintToggle.appendChild(osintRight);
+    osintBody.appendChild(osintToggle);
+    
+    // Collapsible OSINT URLs
+    const osintDetails = el("div", "collapse mt-3");
+    osintDetails.id = "osintUrls";
+    
+    let osintContent = `<div class="bg-light p-2 rounded" style="font-size: 0.9rem;">`;
+    const osintData = data.osint_search_urls;
+    
+    // Email search URLs
+    if (osintData.email_search) {
+      osintContent += `<strong>🔍 Email Search:</strong><br>`;
+      Object.entries(osintData.email_search).forEach(([engine, url]) => {
+        osintContent += `<a href="${url}" target="_blank" class="btn btn-sm btn-outline-primary me-2 mb-1">${engine.charAt(0).toUpperCase() + engine.slice(1)}</a>`;
+      });
+      osintContent += `<br><br>`;
+    }
+    
+    // Breach check URLs
+    if (osintData.breach_check) {
+      osintContent += `<strong>🔒 Breach Check:</strong><br>`;
+      Object.entries(osintData.breach_check).slice(0, 3).forEach(([service, url]) => {
+        osintContent += `<a href="${url}" target="_blank" class="btn btn-sm btn-outline-danger me-2 mb-1">${service.charAt(0).toUpperCase() + service.slice(1)}</a>`;
+      });
+      osintContent += `<br><br>`;
+    }
+    
+    // Domain analysis URLs
+    if (osintData.domain_analysis) {
+      osintContent += `<strong>🌐 Domain Analysis:</strong><br>`;
+      Object.entries(osintData.domain_analysis).slice(0, 3).forEach(([service, url]) => {
+        osintContent += `<a href="${url}" target="_blank" class="btn btn-sm btn-outline-info me-2 mb-1">${service.charAt(0).toUpperCase() + service.slice(1)}</a>`;
+      });
+    }
+    
+    osintContent += `</div>`;
+    osintDetails.innerHTML = osintContent;
+    osintBody.appendChild(osintDetails);
+    osintCard.appendChild(osintBody);
+    resultsGrid.appendChild(osintCard);
+  }
+
+  // Add Export Button
+  const exportButton = el("button", "btn btn-primary mt-2 mb-3");
+  exportButton.innerHTML = '<i class="fa-solid fa-download"></i> Export Results';
+  exportButton.style.cssText = 'width: 100%; background: linear-gradient(45deg, #007bff, #0056b3); border: none;';
+  exportButton.onclick = () => exportResult(data, 'email', data.email);
+  resultsGrid.appendChild(exportButton);
+}
+
+function renderPhoneResults(resultObj) {
+  const phoneCheck = resultObj.phone_check;
+  
+  const card = el("div", "card card-platform p-2 shadow-sm");
+  const body = el("div", "card-body p-2");
+  const row = el("div", "d-flex justify-content-between align-items-start");
+  const left = el("div", "");
+  left.innerHTML = `<div style="font-weight:600">📞 Enhanced Phone Investigation</div>
+                    <div class="text-muted" style="font-size:0.85rem">Multi-source phone analysis & OSINT</div>`;
+  const right = el("div", "");
+  
+  if (phoneCheck.ok && phoneCheck.data && phoneCheck.data.valid !== false) {
+    const data = phoneCheck.data;
+    
+    // Main validation info
+    let mainInfo = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> Valid Number</div>`;
+    
+    // Basic details
+    if (data.country_name || data.location || data.carrier || data.line_type) {
+      mainInfo += `<div class="text-muted mt-2" style="font-size: 0.9rem;">
+                     <strong>🌍 Country:</strong> ${data.country_name || 'Unknown'}<br>
+                     <strong>📍 Location:</strong> ${data.location || 'Unknown'}<br>
+                     <strong>📡 Carrier:</strong> ${data.carrier || 'Unknown'}<br>
+                     <strong>📱 Type:</strong> ${data.line_type || 'Unknown'}<br>
+                     <strong>🔢 Format:</strong> ${data.international_format || 'N/A'}`;
+      
+      // Additional Indian-specific details
+      if (data.circle) {
+        mainInfo += `<br><strong>� Circle:</strong> ${data.circle}`;
+      }
+      if (data.operator_type) {
+        mainInfo += `<br><strong>📶 Network:</strong> ${data.operator_type}`;
+      }
+      
+      mainInfo += `</div>`;
+    }
+    
+    // Validation sources
+    if (data.validation_sources && data.validation_sources.length > 0) {
+      mainInfo += `<div class="mt-2">
+                     <small class="badge bg-info me-1">Sources: ${data.validation_sources.join(', ')}</small>
+                   </div>`;
+    }
+    
+    // Risk assessment
+    if (data.risk_assessment && data.risk_assessment.risk_level) {
+      const riskColor = data.risk_assessment.risk_level === 'Low' ? 'success' : 
+                       data.risk_assessment.risk_level === 'Medium' ? 'warning' : 'danger';
+      mainInfo += `<div class="mt-2">
+                     <small class="badge bg-${riskColor}">Risk: ${data.risk_assessment.risk_level}</small>
+                     <small class="badge bg-secondary ms-1">Trust: ${data.risk_assessment.trust_score}%</small>
+                   </div>`;
+    }
+    
+    right.innerHTML = mainInfo;
+    
+    // Create collapsible sections for additional data
+    if (data.social_media_links || data.additional_data || data.risk_assessment) {
+      const detailsSection = el("div", "mt-3");
+      
+      // Social Media Links
+      if (data.social_media_links && data.social_media_links.length > 0) {
+        const socialCard = el("div", "card mt-2");
+        socialCard.innerHTML = `
+          <div class="card-header py-1">
+            <h6 class="mb-0">
+              <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#social-${Date.now()}">
+                🌐 Social Media Associations
+              </button>
+            </h6>
+          </div>
+          <div class="collapse" id="social-${Date.now()}">
+            <div class="card-body py-2">
+              ${data.social_media_links.map(platform => 
+                `<div class="mb-1">
+                   <strong>${platform.name}:</strong> 
+                   <a href="${platform.url}" target="_blank" class="text-decoration-none">${platform.likely ? '✅ Likely' : '❓ Check'}</a>
+                 </div>`
+              ).join('')}
+            </div>
+          </div>
+        `;
+        detailsSection.appendChild(socialCard);
+      }
+      
+      // OSINT Search URLs
+      if (data.additional_data && data.additional_data.search_urls) {
+        const osintCard = el("div", "card mt-2");
+        const urls = data.additional_data.search_urls;
+        osintCard.innerHTML = `
+          <div class="card-header py-1">
+            <h6 class="mb-0">
+              <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#osint-${Date.now()}">
+                🔍 OSINT Search Links
+              </button>
+            </h6>
+          </div>
+          <div class="collapse" id="osint-${Date.now()}">
+            <div class="card-body py-2">
+              <div class="row">
+                <div class="col-md-6">
+                  <strong>Phone Lookup:</strong><br>
+                  <a href="${urls.truecaller_search}" target="_blank" class="d-block">TrueCaller</a>
+                  <a href="${urls.whocalld_search}" target="_blank" class="d-block">WhoCalld</a>
+                  <a href="${urls.phonevalidator}" target="_blank" class="d-block">PhoneValidator</a>
+                </div>
+                <div class="col-md-6">
+                  <strong>Social Search:</strong><br>
+                  <a href="${urls.google_search}" target="_blank" class="d-block">Google Search</a>
+                  <a href="${urls.facebook_search}" target="_blank" class="d-block">Facebook</a>
+                  <a href="${urls.linkedin_search}" target="_blank" class="d-block">LinkedIn</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        detailsSection.appendChild(osintCard);
+      }
+      
+      // Search Variations
+      if (data.additional_data && data.additional_data.search_variations) {
+        const variationsCard = el("div", "card mt-2");
+        variationsCard.innerHTML = `
+          <div class="card-header py-1">
+            <h6 class="mb-0">
+              <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#variations-${Date.now()}">
+                🔢 Number Variations
+              </button>
+            </h6>
+          </div>
+          <div class="collapse" id="variations-${Date.now()}">
+            <div class="card-body py-2">
+              ${data.additional_data.search_variations.map(variation => 
+                `<code class="me-2">${variation}</code>`
+              ).join('')}
+            </div>
+          </div>
+        `;
+        detailsSection.appendChild(variationsCard);
+      }
+      
+      // Risk Assessment Details
+      if (data.risk_assessment && data.risk_assessment.risk_factors && data.risk_assessment.risk_factors.length > 0) {
+        const riskCard = el("div", "card mt-2");
+        riskCard.innerHTML = `
+          <div class="card-header py-1">
+            <h6 class="mb-0">
+              <button class="btn btn-link btn-sm p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#risk-${Date.now()}">
+                ⚠️ Risk Assessment
+              </button>
+            </h6>
+          </div>
+          <div class="collapse" id="risk-${Date.now()}">
+            <div class="card-body py-2">
+              <strong>Risk Factors:</strong><br>
+              ${data.risk_assessment.risk_factors.map(factor => `• ${factor}`).join('<br>')}
+              ${data.risk_assessment.recommendations ? 
+                `<br><br><strong>Recommendations:</strong><br>${data.risk_assessment.recommendations.map(rec => `• ${rec}`).join('<br>')}` : ''}
+            </div>
+          </div>
+        `;
+        detailsSection.appendChild(riskCard);
+      }
+      
+      body.appendChild(detailsSection);
+    }
+    
+  } else {
+    // Validation failed or error
+    const errorMsg = phoneCheck.error || 'Validation failed';
+    right.innerHTML = `<div class="result-no"><i class="fa-solid fa-exclamation-triangle"></i> ${phoneCheck.ok ? 'Invalid' : 'Error'}</div>
+                       <div class="text-muted mt-2"><small>${errorMsg}</small></div>`;
+  }
+  
+  row.appendChild(left);
+  row.appendChild(right);
+  body.appendChild(row);
+  card.appendChild(body);
+  resultsGrid.appendChild(card);
+
+  // Add Export Button
+  const exportButton = el("button", "btn btn-primary mt-2 mb-3");
+  exportButton.innerHTML = '<i class="fa-solid fa-download"></i> Export Results';
+  exportButton.style.cssText = 'width: 100%; background: linear-gradient(45deg, #17a2b8, #138496); border: none;';
+  exportButton.onclick = () => exportResult(phoneCheck.data || {}, 'phone', phoneCheck.data?.number || phoneCheck.data?.international_format || 'unknown');
+  resultsGrid.appendChild(exportButton);
+}
+
+function renderIPResults(resultObj) {
+  let data;
+  
+  // Handle different data structures
+  if (resultObj.ip_check) {
+    if (!resultObj.ip_check.ok) {
+      // Show error
+      const card = el("div", "card card-platform p-2 shadow-sm");
+      const body = el("div", "card-body p-2");
+      body.innerHTML = `<div class="text-danger"><i class="fa-solid fa-exclamation-triangle"></i> ${resultObj.ip_check.error}</div>`;
+      card.appendChild(body);
+      resultsGrid.appendChild(card);
+      return;
+    }
+    data = resultObj.ip_check.data;
+  } else {
+    // Direct data format
+    data = resultObj;
+  }
+  
+  // Main IP Overview Card
+  const overviewCard = el("div", "card card-platform p-2 shadow-sm");
+  const overviewBody = el("div", "card-body p-2");
+  const overviewRow = el("div", "d-flex justify-content-between align-items-start");
+  const overviewLeft = el("div", "");
+  overviewLeft.innerHTML = `<div style="font-weight:600">🌐 Enhanced IP Investigation</div>
+                           <div class="text-muted" style="font-size:0.85rem">Comprehensive OSINT analysis</div>`;
+  const overviewRight = el("div", "");
+  
+  let overviewInfo = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> Valid IP Address</div>`;
+  overviewInfo += `<div class="text-muted mt-2" style="font-size: 0.9rem;">
+                    <strong>🌐 IP:</strong> ${data.ip || 'Unknown'}<br>
+                    <strong>🔒 Type:</strong> ${data.is_private ? 'Private/Internal' : 'Public'}<br>
+                    <strong>📍 Location:</strong> ${data.geolocation?.city || 'Unknown'}, ${data.geolocation?.country || 'Unknown'}`;
+  
+  if (data.geolocation?.isp) {
+    overviewInfo += `<br><strong>🏢 ISP:</strong> ${data.geolocation.isp}`;
+  }
+  
+  overviewInfo += `</div>`;
+  
+  overviewRight.innerHTML = overviewInfo;
+  overviewRow.appendChild(overviewLeft);
+  overviewRow.appendChild(overviewRight);
+  overviewBody.appendChild(overviewRow);
+  overviewCard.appendChild(overviewBody);
+  resultsGrid.appendChild(overviewCard);
+  
+  // Render detailed IP information
+  const sections = [
+    { title: "📍 Geolocation", data: data.geolocation, icon: "fa-map-marker-alt" },
+    { title: "🌐 Network Info", data: data.network_info, icon: "fa-network-wired" },
+    { title: "🔍 Reverse DNS", data: data.reverse_dns, icon: "fa-search" },
+    { title: "🛡️ Security Analysis", data: data.security_analysis, icon: "fa-shield-alt" },
+    { title: "⭐ Reputation", data: data.reputation, icon: "fa-star" },
+    { title: "🔗 OSINT URLs", data: data.osint_search_urls, icon: "fa-external-link-alt" },
+    { title: "⚠️ Threat Intelligence", data: data.threat_intelligence, icon: "fa-exclamation-triangle" },
+    { title: "ℹ️ Additional Info", data: data.additional_info, icon: "fa-info-circle" }
+  ];
+  
+  sections.forEach(section => {
+    if (section.data && Object.keys(section.data).length > 0) {
+      const card = el("div", "card card-platform p-2 shadow-sm");
+      const body = el("div", "card-body p-2");
+      const row = el("div", "d-flex justify-content-between align-items-start");
+      const left = el("div", "");
+      left.innerHTML = `<div style="font-weight:600"><i class="fa-solid ${section.icon}"></i> ${section.title}</div>`;
+      
+      const right = el("div", "");
+      let content = '';
+      
+      if (section.title === "🔗 OSINT URLs") {
+        // Special handling for OSINT URLs
+        content = '<div class="row g-2">';
+        let count = 0;
+        for (const [platform, url] of Object.entries(section.data)) {
+          if (count < 8) { // Show only first 8 URLs
+            content += `<div class="col-6"><a href="${url}" target="_blank" class="btn btn-sm btn-outline-primary w-100">${platform}</a></div>`;
+            count++;
+          }
+        }
+        content += '</div>';
+        if (Object.keys(section.data).length > 8) {
+          content += `<small class="text-muted">... and ${Object.keys(section.data).length - 8} more URLs</small>`;
+        }
+      } else {
+        // Regular data display
+        for (const [key, value] of Object.entries(section.data)) {
+          if (value && value !== 'Unknown' && value !== 'N/A' && value !== null) {
+            const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            if (typeof value === 'boolean') {
+              content += `<div><strong>${displayKey}:</strong> ${value ? '✅ Yes' : '❌ No'}</div>`;
+            } else if (Array.isArray(value) && value.length > 0) {
+              content += `<div><strong>${displayKey}:</strong> ${value.join(', ')}</div>`;
+            } else if (typeof value === 'object') {
+              // Skip nested objects for now
+              continue;
+            } else {
+              content += `<div><strong>${displayKey}:</strong> ${value}</div>`;
+            }
+          }
+        }
+      }
+      
+      if (content) {
+        right.innerHTML = content;
+      } else {
+        right.innerHTML = '<div class="text-muted">No additional information available</div>';
+      }
+      
+      row.appendChild(left);
+      row.appendChild(right);
+      body.appendChild(row);
+      card.appendChild(body);
+      resultsGrid.appendChild(card);
+    }
+  });
+
+  // Add Export Button
+  const exportButton = el("button", "btn btn-primary mt-2 mb-3");
+  exportButton.innerHTML = '<i class="fa-solid fa-download"></i> Export Results';
+  exportButton.style.cssText = 'width: 100%; background: linear-gradient(45deg, #fd7e14, #e55a00); border: none;';
+  exportButton.onclick = () => exportResult(data, 'ip', data.ip || 'unknown');
+  resultsGrid.appendChild(exportButton);
+}
+
+function renderNameResults(resultObj) {
+  const nameCheck = resultObj.name_check;
+  
+  if (!nameCheck.ok) {
+    // Show error
+    const card = el("div", "card card-platform p-2 shadow-sm");
+    const body = el("div", "card-body p-2");
+    body.innerHTML = `<div class="text-danger"><i class="fa-solid fa-exclamation-triangle"></i> ${nameCheck.error}</div>`;
+    card.appendChild(body);
+    resultsGrid.appendChild(card);
+    return;
+  }
+  
+  const data = nameCheck.data;
+  
+  // Name Variations Card
+  const variationsCard = el("div", "card card-platform p-2 shadow-sm");
+  const variationsBody = el("div", "card-body p-2");
+  const variationsRow = el("div", "d-flex justify-content-between align-items-start");
+  const variationsLeft = el("div", "");
+  variationsLeft.innerHTML = `<div style="font-weight:600">🔤 Name Variations</div>
+                              <div class="text-muted" style="font-size:0.85rem">Common name formats and variations</div>`;
+  const variationsRight = el("div", "");
+  variationsRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-list"></i> ${data.variations.length} Variations</div>
+                               <div class="text-muted mt-2" style="font-size: 0.9rem;">
+                                 ${data.variations.slice(0, 5).map(v => `<span class="badge bg-light text-dark me-1">${v}</span>`).join('')}
+                               </div>`;
+  variationsRow.appendChild(variationsLeft);
+  variationsRow.appendChild(variationsRight);
+  variationsBody.appendChild(variationsRow);
+  variationsCard.appendChild(variationsBody);
+  resultsGrid.appendChild(variationsCard);
+  
+  // Professional Networks Card
+  const professionalCard = el("div", "card card-platform p-2 shadow-sm");
+  const professionalBody = el("div", "card-body p-2");
+  const professionalRow = el("div", "d-flex justify-content-between align-items-start");
+  const professionalLeft = el("div", "");
+  professionalLeft.innerHTML = `<div style="font-weight:600">💼 Professional Networks</div>
+                                <div class="text-muted" style="font-size:0.85rem">LinkedIn, AngelList, Research profiles</div>`;
+  const professionalRight = el("div", "");
+  
+  const foundProfiles = Object.values(data.professional_networks).filter(p => p.found).length;
+  if (foundProfiles > 0) {
+    professionalRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> ${foundProfiles} Profiles Found</div>
+                                   <div class="text-muted mt-2" style="font-size: 0.9rem;">
+                                     ${Object.entries(data.professional_networks)
+                                       .filter(([_, p]) => p.found)
+                                       .map(([platform, p]) => `<strong>${platform}:</strong> Found<br>`)
+                                       .join('')}
+                                   </div>`;
+  } else {
+    professionalRight.innerHTML = `<div class="result-no"><i class="fa-regular fa-circle-xmark"></i> No Profiles Found</div>
+                                   <div class="text-muted mt-2" style="font-size: 0.9rem;">
+                                     <small>Demo simulation - Use real APIs for live data</small>
+                                   </div>`;
+  }
+  
+  professionalRow.appendChild(professionalLeft);
+  professionalRow.appendChild(professionalRight);
+  professionalBody.appendChild(professionalRow);
+  professionalCard.appendChild(professionalBody);
+  resultsGrid.appendChild(professionalCard);
+  
+  // Public Records Card
+  const recordsCard = el("div", "card card-platform p-2 shadow-sm");
+  const recordsBody = el("div", "card-body p-2");
+  const recordsRow = el("div", "d-flex justify-content-between align-items-start");
+  const recordsLeft = el("div", "");
+  recordsLeft.innerHTML = `<div style="font-weight:600">📋 Public Records</div>
+                           <div class="text-muted" style="font-size:0.85rem">Voter, property, court, business records</div>`;
+  const recordsRight = el("div", "");
+  
+  const records = data.public_records;
+  const foundRecords = Object.entries(records).filter(([key, val]) => val.found && key !== 'variations_checked' && key !== 'name_variations').length;
+  
+  if (foundRecords > 0) {
+    recordsRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-file-text"></i> ${foundRecords} Records Found</div>
+                              <div class="text-muted mt-2" style="font-size: 0.9rem;">
+                                ${records.voter_records.found ? '<strong>✓</strong> Voter Records<br>' : ''}
+                                ${records.property_records.found ? '<strong>✓</strong> Property Records<br>' : ''}
+                                ${records.court_records.found ? '<strong>✓</strong> Court Records<br>' : ''}
+                                ${records.business_filings.found ? '<strong>✓</strong> Business Filings<br>' : ''}
+                                <small>Checked ${records.variations_checked} name variations</small>
+                              </div>`;
+  } else {
+    recordsRight.innerHTML = `<div class="result-no"><i class="fa-regular fa-circle-xmark"></i> No Records Found</div>
+                              <div class="text-muted mt-2" style="font-size: 0.9rem;">
+                                <small>Demo simulation - Use real APIs for live data</small>
+                              </div>`;
+  }
+  
+  recordsRow.appendChild(recordsLeft);
+  recordsRow.appendChild(recordsRight);
+  recordsBody.appendChild(recordsRow);
+  recordsCard.appendChild(recordsBody);
+  resultsGrid.appendChild(recordsCard);
+  
+  // Username Suggestions Card
+  const suggestionsCard = el("div", "card card-platform p-2 shadow-sm");
+  const suggestionsBody = el("div", "card-body p-2");
+  const suggestionsRow = el("div", "d-flex justify-content-between align-items-start");
+  const suggestionsLeft = el("div", "");
+  suggestionsLeft.innerHTML = `<div style="font-weight:600">💡 Username Suggestions</div>
+                               <div class="text-muted" style="font-size:0.85rem">Potential social media usernames</div>`;
+  const suggestionsRight = el("div", "");
+  suggestionsRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-lightbulb"></i> ${data.username_suggestions.length} Suggestions</div>
+                                <div class="text-muted mt-2" style="font-size: 0.9rem;">
+                                  ${data.username_suggestions.map(u => `<span class="badge bg-secondary me-1">${u}</span>`).join('')}
+                                </div>`;
+  
+  suggestionsRow.appendChild(suggestionsLeft);
+  suggestionsRow.appendChild(suggestionsRight);
+  suggestionsBody.appendChild(suggestionsRow);
+  suggestionsCard.appendChild(suggestionsBody);
+  resultsGrid.appendChild(suggestionsCard);
+
+  // Add Export Button
+  const exportButton = el("button", "btn btn-primary mt-2 mb-3");
+  exportButton.innerHTML = '<i class="fa-solid fa-download"></i> Export Results';
+  exportButton.style.cssText = 'width: 100%; background: linear-gradient(45deg, #6f42c1, #5a32a3); border: none;';
+  exportButton.onclick = () => exportResult(data, 'name', data.name || 'unknown');
+  resultsGrid.appendChild(exportButton);
+}
+
+async function runEnhancedAnalysis(username) {
+  clearResults();
+  statusArea.innerHTML = `<div class="spinner-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div> <div class="ms-2">Running enhanced analysis for ${username}…</div></div>`;
+  
+  try {
+    const res = await fetch("/api/enhanced-username", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username })
+    });
+    const j = await res.json();
+    
+    if (res.ok) {
+      renderResults(username, j);
+      fetchHistory(); // refresh sidebar
+    } else {
+      statusArea.innerHTML = `<div class="text-danger">${j.error || 'Enhanced analysis failed'}</div>`;
+    }
+  } catch (err) {
+    statusArea.innerHTML = `<div class="text-danger">Network error during enhanced analysis</div>`;
+  }
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = usernameInput.value.trim();
+  if (!username) return;
+  clearResults();
+  statusArea.innerHTML = `<div class="spinner-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div> <div class="ms-2">Checking ${username}…</div></div>`;
+  try {
+    const res = await fetch("/api/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username })
+    });
+    const j = await res.json();
+    if (res.ok) {
+      // Handle different response types
+      if (j.type === "email") {
+        // Email response
+        renderResults(username, j);
+      } else if (j.type === "phone") {
+        // Phone number response
+        renderResults(username, j);
+      } else if (j.type === "name") {
+        // Name investigation response
+        renderResults(username, j);
+      } else if (j.type === "enhanced_username") {
+        // Enhanced username response
+        renderResults(username, j);
+      } else if (j.username && j.results) {
+        // Username response (social media)
+        renderResults(j.username, j.results);
+      } else {
+        // Fallback for other formats
+        renderResults(username, j);
+      }
+      fetchHistory(); // refresh sidebar
+    } else {
+      statusArea.innerHTML = `<div class="text-danger">${j.error || 'Error'}</div>`;
+    }
+  } catch (err) {
+    statusArea.innerHTML = `<div class="text-danger">Network error</div>`;
+  }
+});
+
+async function runBulkSearch() {
+  const items = bulkInput.value.trim().split('\n').filter(item => item.trim());
+  const searchType = bulkType.value;
+  
+  if (items.length === 0) {
+    alert('Please enter at least one item to search');
+    return;
+  }
+  
+  if (items.length > 50) {
+    alert('Maximum 50 items allowed for bulk search');
+    return;
+  }
+  
+  clearResults();
+  statusArea.innerHTML = `<div class="spinner-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div> <div class="ms-2">Processing ${items.length} items...</div></div>`;
+  
+  try {
+    const res = await fetch("/api/bulk-search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items, type: searchType })
+    });
+    const j = await res.json();
+    
+    if (res.ok) {
+      currentBulkResults = j.bulk_results;
+      renderBulkResults(j);
+      exportSection.classList.remove('d-none');
+      fetchHistory();
+    } else {
+      statusArea.innerHTML = `<div class="text-danger">${j.error || 'Bulk search failed'}</div>`;
+    }
+  } catch (err) {
+    statusArea.innerHTML = `<div class="text-danger">Network error during bulk search</div>`;
+  }
+}
+
+function renderBulkResults(bulkData) {
+  clearResults();
+  const summary = bulkData.summary;
+  
+  // Summary Card
+  const summaryCard = el("div", "card card-platform p-2 shadow-sm bg-info");
+  const summaryBody = el("div", "card-body p-2");
+  summaryBody.innerHTML = `
+    <div class="d-flex justify-content-between align-items-start text-white">
+      <div>
+        <div style="font-weight:600"><i class="fa-solid fa-chart-bar"></i> Bulk Search Summary</div>
+        <div style="font-size:0.85rem">Processed ${summary.total_items} items</div>
+      </div>
+      <div class="text-end">
+        <div style="font-weight:600">${summary.successful}/${summary.total_items} Successful</div>
+        <div style="font-size:0.85rem">${summary.failed} failed • Type: ${summary.search_type}</div>
+      </div>
+    </div>
+  `;
+  summaryCard.appendChild(summaryBody);
+  resultsGrid.appendChild(summaryCard);
+  
+  // Individual Results
+  bulkData.bulk_results.forEach((result, index) => {
+    const card = el("div", "card card-platform p-2 shadow-sm");
+    const body = el("div", "card-body p-2");
+    const row = el("div", "d-flex justify-content-between align-items-start");
+    const left = el("div", "");
+    left.innerHTML = `<div style="font-weight:600">${index + 1}. ${result.item}</div>
+                      <div class="text-muted" style="font-size:0.85rem">Type: ${result.type}</div>`;
+    const right = el("div", "");
+    
+    if (result.status === "success") {
+      let details = "";
+      if (result.type === "username") {
+        const foundPlatforms = Object.entries(result.result).filter(([_, info]) => info.exists).length;
+        details = `Found on ${foundPlatforms} platforms`;
+      } else if (result.type === "email" && result.result.ok) {
+        details = `Valid email • ${result.result.data.domain}`;
+      } else if (result.type === "phone" && result.result.ok) {
+        details = result.result.data.valid ? `Valid • ${result.result.data.carrier}` : "Invalid number";
+      } else if (result.type === "name" && result.result.ok) {
+        details = `${result.result.data.variations.length} name variations`;
+      } else {
+        details = "Processed successfully";
+      }
+      
+      right.innerHTML = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> Success</div>
+                         <div class="text-muted mt-1" style="font-size: 0.85rem;">${details}</div>`;
+    } else {
+      const errorMsg = result.result.error || "Failed";
+      right.innerHTML = `<div class="result-no"><i class="fa-solid fa-exclamation-triangle"></i> Failed</div>
+                         <div class="text-muted mt-1" style="font-size: 0.85rem;">${errorMsg}</div>`;
+    }
+    
+    row.appendChild(left);
+    row.appendChild(right);
+    body.appendChild(row);
+    card.appendChild(body);
+    resultsGrid.appendChild(card);
+  });
+}
+
+async function exportResults(format) {
+  if (!currentBulkResults) {
+    alert('No results to export');
+    return;
+  }
+  
+  exportStatus.textContent = `Exporting ${format.toUpperCase()}...`;
+  
+  try {
+    const res = await fetch("/api/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ format, results: currentBulkResults })
+    });
+    
+    if (format === "json") {
+      const jsonData = await res.json();
+      const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `osint_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      exportStatus.textContent = 'JSON exported successfully!';
+    } else if (format === "csv") {
+      const csvResponse = await res.text();
+      const blob = new Blob([csvResponse], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `osint_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      exportStatus.textContent = 'CSV exported successfully!';
+    }
+    
+    setTimeout(() => {
+      exportStatus.textContent = '';
+    }, 3000);
+    
+  } catch (err) {
+    exportStatus.textContent = `Export failed: ${err.message}`;
+    setTimeout(() => {
+      exportStatus.textContent = '';
+    }, 5000);
+  }
+}
+
+// Watchlist Management Functions
+async function fetchWatchlist() {
+  try {
+    const res = await fetch("/api/watchlist");
+    const j = await res.json();
+    displayWatchlist(j.watchlist || []);
+  } catch (err) {
+    watchlistItems.innerHTML = "<div class='text-danger small'>Failed to load watchlist</div>";
+  }
+}
+
+function displayWatchlist(watchlist) {
+  watchlistItems.innerHTML = "";
+  
+  if (watchlist.length === 0) {
+    watchlistItems.innerHTML = "<div class='text-muted small'>Watchlist is empty</div>";
+    return;
+  }
+  
+  watchlist.forEach(item => {
+    const row = el("div", "d-flex justify-content-between align-items-center mb-1 p-1 border rounded small");
+    const typeIcon = {
+      email: "fa-envelope",
+      phone: "fa-phone", 
+      name: "fa-user",
+      username: "fa-at",
+      ip: "fa-globe"
+    }[item.item_type] || "fa-search";
+    
+    row.innerHTML = `
+      <div style="flex: 1;">
+        <i class="fa-solid ${typeIcon} me-1" style="color: #6c757d;"></i>
+        <span>${item.item}</span>
+      </div>
+      <button class="btn btn-sm btn-outline-danger" onclick="removeFromWatchlistHandler('${item.item}')">
+        <i class="fa-solid fa-times"></i>
+      </button>
+    `;
+    watchlistItems.appendChild(row);
+  });
+}
+
+async function addItemToWatchlist(item) {
+  try {
+    const res = await fetch("/api/watchlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item })
+    });
+    
+    if (res.ok) {
+      fetchWatchlist();
+      return true;
+    } else {
+      const j = await res.json();
+      if (res.status === 409) {
+        alert("Item already in watchlist");
+      } else {
+        alert(j.error || "Failed to add to watchlist");
+      }
+      return false;
+    }
+  } catch (err) {
+    alert("Network error while adding to watchlist");
+    return false;
+  }
+}
+
+async function removeFromWatchlistHandler(item) {
+  try {
+    const res = await fetch(`/api/watchlist/${encodeURIComponent(item)}`, {
+      method: "DELETE"
+    });
+    
+    if (res.ok) {
+      fetchWatchlist();
+    } else {
+      alert("Failed to remove from watchlist");
+    }
+  } catch (err) {
+    alert("Network error while removing from watchlist");
+  }
+}
+
+async function monitorWatchlistHandler() {
+  const originalText = monitorWatchlist.innerHTML;
+  monitorWatchlist.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Monitoring...';
+  monitorWatchlist.disabled = true;
+  
+  try {
+    const res = await fetch("/api/watchlist/monitor", {
+      method: "POST"
+    });
+    const j = await res.json();
+    
+    if (res.ok) {
+      // Display monitoring results
+      clearResults();
+      statusArea.innerHTML = `<h5>Watchlist Monitoring Results</h5>`;
+      renderBulkResults({ bulk_results: j.monitor_results, summary: j.summary });
+      fetchHistory(); // Refresh history since monitoring creates new entries
+    } else {
+      alert(j.error || "Monitoring failed");
+    }
+  } catch (err) {
+    alert("Network error during monitoring");
+  } finally {
+    monitorWatchlist.innerHTML = originalText;
+    monitorWatchlist.disabled = false;
+  }
+}
+
+// Event listeners for bulk search and export
+bulkSearchBtn.onclick = runBulkSearch;
+exportJson.onclick = () => exportResults('json');
+exportCsv.onclick = () => exportResults('csv');
+
+// Event listeners for watchlist
+addToWatchlist.onclick = async () => {
+  const item = watchlistInput.value.trim();
+  if (item) {
+    const success = await addItemToWatchlist(item);
+    if (success) {
+      watchlistInput.value = "";
+    }
+  }
+};
+
+watchlistInput.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") {
+    addToWatchlist.click();
+  }
+});
+
+monitorWatchlist.onclick = monitorWatchlistHandler;
+
+// Event listeners for filtering and sorting
+filterBtns.forEach(btn => {
+  btn.onclick = () => {
+    filterBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    displayFilteredHistory();
+  };
+});
+
+sortHistory.onchange = () => {
+  currentSort = sortHistory.value;
+  displayFilteredHistory();
+};
+
+clearBtn.onclick = () => {
+  usernameInput.value = "";
+  clearResults();
+};
+
+window.addEventListener("DOMContentLoaded", () => {
+  fetchHistory();
+  fetchWatchlist();
+});
+
+// Export Functions
+function exportResult(resultData, investigationType, target) {
+    const exportModal = document.createElement('div');
+    exportModal.className = 'modal';
+    exportModal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    `;
+
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    `;
+
+    modalContent.innerHTML = `
+        <h3>Export Result</h3>
+        <p>Choose export format for ${investigationType} investigation of "${target}"</p>
+        <div style="margin: 20px 0;">
+            <button onclick="exportResultFormat('json', '${investigationType}', '${target}')" 
+                    style="margin: 5px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                JSON
+            </button>
+            <button onclick="exportResultFormat('csv', '${investigationType}', '${target}')" 
+                    style="margin: 5px; padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                CSV
+            </button>
+            <button onclick="exportResultFormat('pdf', '${investigationType}', '${target}')" 
+                    style="margin: 5px; padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                PDF
+            </button>
+        </div>
+        <button onclick="closeExportModal()" 
+                style="margin-top: 15px; padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer;">
+            Cancel
+        </button>
+    `;
+
+    exportModal.appendChild(modalContent);
+    document.body.appendChild(exportModal);
+
+    // Store data for export
+    window.currentExportData = {
+        result_data: resultData,
+        type: investigationType,
+        target: target
+    };
+
+    // Close modal on outside click
+    exportModal.addEventListener('click', function(e) {
+        if (e.target === exportModal) {
+            closeExportModal();
+        }
+    });
+}
+
+function exportResultFormat(format, investigationType, target) {
+    if (!window.currentExportData) {
+        alert('No data to export');
+        return;
+    }
+
+    // Show loading
+    const loadingDiv = document.createElement('div');
+    loadingDiv.innerHTML = `
+        <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                    background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1001;">
+            <div style="text-align: center;">
+                <div style="margin-bottom: 10px;">Generating ${format.toUpperCase()} export...</div>
+                <div style="width: 30px; height: 30px; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; 
+                           border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+            </div>
+        </div>
+        <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    `;
+    document.body.appendChild(loadingDiv);
+
+    fetch('/api/export-result', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            ...window.currentExportData,
+            format: format
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => Promise.reject(err));
+        }
+        
+        // Get filename from response headers
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = `osint_${investigationType}_${target}_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.${format}`;
+        
+        if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="?([^"]*)"?/);
+            if (filenameMatch) {
+                filename = filenameMatch[1];
+            }
+        }
+
+        return response.blob().then(blob => ({ blob, filename }));
+    })
+    .then(({ blob, filename }) => {
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Remove loading and close modal
+        document.body.removeChild(loadingDiv);
+        closeExportModal();
+        
+        // Show success message
+        showNotification(`${format.toUpperCase()} export downloaded successfully!`, 'success');
+    })
+    .catch(error => {
+        document.body.removeChild(loadingDiv);
+        console.error('Export error:', error);
+        alert(error.error || `Failed to export ${format.toUpperCase()}`);
+    });
+}
+
+function closeExportModal() {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+        document.body.removeChild(modal);
+    }
+    delete window.currentExportData;
+}
+
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        border-radius: 5px;
+        color: white;
+        font-weight: bold;
+        z-index: 1002;
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    switch(type) {
+        case 'success':
+            notification.style.background = '#28a745';
+            break;
+        case 'error':
+            notification.style.background = '#dc3545';
+            break;
+        default:
+            notification.style.background = '#007bff';
+    }
+    
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    // Add animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            document.body.removeChild(notification);
+        }
+        if (style.parentNode) {
+            document.head.removeChild(style);
+        }
+    }, 3000);
+}
