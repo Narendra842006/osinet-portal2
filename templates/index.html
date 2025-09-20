@@ -8,144 +8,713 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
   <style>
-    body { padding: 28px; background: #f7fafc; }
+    :root {
+      --primary-blue: #3b82f6;
+      --secondary-blue: #1e40af;
+      --light-blue: #dbeafe;
+      --gray-50: #f8fafc;
+      --gray-100: #f1f5f9;
+      --gray-200: #e2e8f0;
+      --gray-600: #475569;
+      --gray-700: #334155;
+      --gray-800: #1e293b;
+      --success-green: #10b981;
+      --warning-orange: #f59e0b;
+      --danger-red: #ef4444;
+    }
+
+    body { 
+      background: linear-gradient(135deg, var(--gray-50) 0%, var(--light-blue) 100%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    /* Navbar Styles */
+    .navbar-custom {
+      background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .navbar-brand {
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: white !important;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .navbar-brand:hover {
+      color: var(--light-blue) !important;
+    }
+
+    .navbar-nav .nav-link {
+      color: rgba(255, 255, 255, 0.9) !important;
+      font-weight: 500;
+      padding: 0.5rem 1rem !important;
+      border-radius: 0.5rem;
+      transition: all 0.3s ease;
+    }
+
+    .navbar-nav .nav-link:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: white !important;
+      transform: translateY(-1px);
+    }
+
+    /* Main Content */
+    .main-container {
+      padding-top: 100px;
+      padding-bottom: 60px;
+      min-height: 100vh;
+    }
+
+    /* Card Enhancements */
+    .custom-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 1rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+    }
+
+    .custom-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+
     .card-platform { min-width: 220px; }
-    .result-yes { color: #1b8a3e; font-weight:700; }
-    .result-no { color: #8a8a8a; }
-    .spinner-center { display:flex; align-items:center; justify-content:center; padding:40px; }
+    .result-yes { color: var(--success-green); font-weight: 700; }
+    .result-no { color: var(--gray-600); }
+    .spinner-center { display: flex; align-items: center; justify-content: center; padding: 40px; }
     .history-item { font-size: 0.9rem; }
+
+    /* Sidebar Styles */
+    .sidebar {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--gray-200);
+      min-height: 100vh;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 250px;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease;
+      z-index: 1040;
+      padding-top: 80px;
+    }
+
+    .sidebar.show {
+      transform: translateX(0);
+    }
+
+    .sidebar-nav {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .sidebar-nav .nav-item {
+      padding: 0.5rem 1.5rem;
+    }
+
+    .sidebar-nav .nav-link {
+      color: var(--gray-700);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+
+    .sidebar-nav .nav-link:hover {
+      background: var(--light-blue);
+      color: var(--secondary-blue);
+      transform: translateX(5px);
+    }
+
+    .sidebar-nav .nav-link.active {
+      background: var(--primary-blue);
+      color: white;
+    }
+
+    /* Content adjustment when sidebar is open */
+    .content-shift {
+      margin-left: 250px;
+      transition: margin-left 0.3s ease;
+    }
+
+    /* Overlay for mobile */
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1030;
+      display: none;
+    }
+
+    .sidebar-overlay.show {
+      display: block;
+    }
+
+    /* Footer */
+    .footer {
+      background: var(--gray-800);
+      color: white;
+      padding: 2rem 0;
+      margin-top: auto;
+    }
+
+    .footer h6 {
+      color: var(--primary-blue);
+      font-weight: 600;
+    }
+
+    .footer a {
+      color: var(--gray-200);
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+
+    .footer a:hover {
+      color: var(--primary-blue);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .content-shift {
+        margin-left: 0;
+      }
+      
+      .main-container {
+        padding-top: 80px;
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+      
+      .custom-card {
+        margin-bottom: 1rem;
+      }
+      
+      .navbar-brand {
+        font-size: 1.25rem;
+      }
+      
+      .btn-lg {
+        padding: 0.5rem 1rem;
+        font-size: 1rem;
+      }
+      
+      .form-control-lg {
+        padding: 0.5rem 0.75rem;
+        font-size: 1rem;
+      }
+      
+      .d-flex.gap-2 {
+        flex-direction: column;
+        gap: 0.5rem !important;
+      }
+      
+      .row.g-4 {
+        --bs-gutter-x: 1rem;
+      }
+    }
+
+    @media (max-width: 576px) {
+      .main-container {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+      }
+      
+      .custom-card {
+        border-radius: 0.75rem;
+      }
+      
+      .sidebar {
+        width: 100%;
+      }
+      
+      .filter-btn {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+      }
+      
+      .row.text-center .col-6,
+      .row.text-center .col-md-3 {
+        margin-bottom: 1rem;
+      }
+    }
+
+    /* Loading animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .custom-card {
+      animation: fadeIn 0.3s ease-out;
+    }
+    
+    /* Hover effects */
+    .filter-btn:hover {
+      transform: translateY(-1px);
+    }
+    
+    .nav-link:hover {
+      transform: translateY(-1px);
+    }
+
+    /* Button enhancements */
+    .btn {
+      border-radius: 0.5rem;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
+      border: none;
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, var(--success-green) 0%, #059669 100%);
+      border: none;
+    }
+
+    /* Input focus effects */
+    .form-control:focus {
+      border-color: var(--primary-blue);
+      box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+    }
+
+    /* Alert animations */
+    .alert {
+      animation: fadeIn 0.5s ease-out;
+    }
+
+    /* Spinner improvements */
+    .spinner-border {
+      animation: spinner-border 0.75s linear infinite;
+    }
+    
+    @keyframes spinner-border {
+      to {
+        transform: rotate(360deg);
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h2 class="mb-0"><i class="fa-solid fa-magnifying-glass"></i> OSINT Portal — Multi-Type Investigation</h2>
+  <!-- Fixed Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-custom fixed-top">
+    <div class="container-fluid">
+      <button class="btn btn-link text-white me-3 d-lg-none" id="sidebarToggle" type="button">
+        <i class="fas fa-bars"></i>
+      </button>
+      
+      <a class="navbar-brand" href="#">
+        <i class="fas fa-search-plus"></i>
+        OSINT Portal
+      </a>
+      
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="#" onclick="setActiveSection('dashboard')">
+              <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#" onclick="setActiveSection('reports')">
+              <i class="fas fa-chart-bar me-2"></i>Reports
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#" onclick="setActiveSection('about')">
+              <i class="fas fa-info-circle me-2"></i>About
+            </a>
+          </li>
+        </ul>
+      </div>
     </div>
+  </nav>
 
-    <div class="row g-3">
-      <div class="col-md-8">
-        <div class="card p-3">
-          <form id="searchForm" class="d-flex gap-2">
-            <input id="usernameInput" class="form-control" placeholder="Enter name, username, email, phone, or IP (e.g. John Smith, alice123, john@gmail.com, +91 9876543210, 8.8.8.8)" />
-            <button id="searchBtn" class="btn btn-primary"><i class="fa-solid fa-search"></i> Search</button>
-            <button id="clearBtn" class="btn btn-outline-secondary" type="button"><i class="fa-solid fa-xmark"></i></button>
-          </form>
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <ul class="sidebar-nav">
+      <li class="nav-item">
+        <a class="nav-link active" href="#" onclick="setActiveSection('dashboard')">
+          <i class="fas fa-tachometer-alt"></i>
+          Dashboard
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" onclick="setActiveSection('search')">
+          <i class="fas fa-search"></i>
+          Investigation
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" onclick="setActiveSection('bulk')">
+          <i class="fas fa-layer-group"></i>
+          Bulk Search
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" onclick="setActiveSection('history')">
+          <i class="fas fa-history"></i>
+          History
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" onclick="setActiveSection('watchlist')">
+          <i class="fas fa-eye"></i>
+          Watchlist
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" onclick="setActiveSection('reports')">
+          <i class="fas fa-chart-bar"></i>
+          Reports
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="#" onclick="setActiveSection('about')">
+          <i class="fas fa-info-circle"></i>
+          About
+        </a>
+      </li>
+    </ul>
+  </div>
 
-          <!-- Bulk Search Toggle -->
-          <div class="mt-3">
-            <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#bulkSearch" aria-expanded="false">
-              <i class="fa-solid fa-list"></i> Bulk Search & Export
-            </button>
-          </div>
+  <!-- Sidebar Overlay for mobile -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-          <!-- Bulk Search Interface -->
-          <div class="collapse mt-3" id="bulkSearch">
-            <div class="card card-body bg-light">
-              <h6><i class="fa-solid fa-layer-group"></i> Bulk Investigation</h6>
-              <div class="row g-2 mb-3">
-                <div class="col-md-8">
-                  <textarea id="bulkInput" class="form-control" rows="4" placeholder="Enter multiple items (one per line):&#10;john.smith@email.com&#10;alice123&#10;+1234567890&#10;Jane Doe"></textarea>
-                </div>
-                <div class="col-md-4">
-                  <select id="bulkType" class="form-select mb-2">
-                    <option value="auto">Auto-detect type</option>
-                    <option value="username">Usernames only</option>
-                    <option value="email">Emails only</option>
-                    <option value="phone">Phone numbers only</option>
-                    <option value="name">Names only</option>
-                  </select>
-                  <button id="bulkSearchBtn" class="btn btn-success w-100"><i class="fa-solid fa-search"></i> Bulk Search</button>
-                </div>
+  <!-- Main Content -->
+  <div class="main-container" id="mainContent">
+    <div class="container-fluid">
+
+      <!-- Dashboard Header -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="custom-card p-4">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <h2 class="mb-1 text-primary">
+                  <i class="fas fa-search-plus me-2"></i>
+                  Multi-Type Investigation Dashboard
+                </h2>
+                <p class="text-muted mb-0">Comprehensive OSINT toolkit for usernames, emails, phones, IPs, and names</p>
               </div>
-              
-              <!-- Export Options -->
-              <div id="exportSection" class="d-none">
-                <hr>
-                <h6><i class="fa-solid fa-download"></i> Export Results</h6>
-                <div class="d-flex gap-2">
-                  <button id="exportJson" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-file-code"></i> Export JSON</button>
-                  <button id="exportCsv" class="btn btn-outline-success btn-sm"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
-                  <span id="exportStatus" class="text-muted ms-2"></span>
+              <div class="text-end">
+                <div class="badge bg-primary fs-6 px-3 py-2">
+                  <i class="fas fa-shield-alt me-2"></i>
+                  Secure Portal
                 </div>
               </div>
             </div>
           </div>
-
-          <div id="statusArea" class="mt-3"></div>
-
-          <div id="resultsGrid" class="d-flex flex-wrap gap-3 mt-3"></div>
         </div>
       </div>
 
-      <div class="col-md-4">
-        <div class="card p-3 mb-3">
-          <h6><i class="fa-solid fa-clock"></i> Recent Searches</h6>
-          
-          <!-- Search Filters -->
-          <div class="mb-3">
-            <div class="d-flex gap-1 mb-2">
-              <button class="btn btn-sm btn-outline-secondary filter-btn active" data-filter="all">All</button>
-              <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="email">Email</button>
-              <button class="btn btn-sm btn-outline-success filter-btn" data-filter="phone">Phone</button>
-              <button class="btn btn-sm btn-outline-danger filter-btn" data-filter="ip">IP</button>
-              <button class="btn btn-sm btn-outline-info filter-btn" data-filter="name">Name</button>
-              <button class="btn btn-sm btn-outline-warning filter-btn" data-filter="username">Username</button>
+      <div class="row g-4">
+        <div class="col-lg-8">
+          <div class="custom-card p-4">
+            <!-- Quick Search Section -->
+            <div class="mb-4">
+              <h5 class="card-title text-primary mb-3">
+                <i class="fas fa-search me-2"></i>
+                Quick Investigation
+              </h5>
+              <form id="searchForm" class="d-flex gap-2">
+                <div class="flex-grow-1">
+                  <input id="usernameInput" class="form-control form-control-lg" 
+                         placeholder="Enter name, username, email, phone, or IP (e.g. John Smith, alice123, john@gmail.com, +91 9876543210, 8.8.8.8)" 
+                         style="border-radius: 0.75rem; border: 2px solid var(--gray-200); background: var(--gray-50);" />
+                </div>
+                <button id="searchBtn" class="btn btn-primary btn-lg px-4" style="border-radius: 0.75rem;">
+                  <i class="fas fa-search me-2"></i>Search
+                </button>
+                <button id="clearBtn" class="btn btn-outline-secondary btn-lg" type="button" style="border-radius: 0.75rem;">
+                  <i class="fas fa-times"></i>
+                </button>
+              </form>
             </div>
-            <select id="sortHistory" class="form-select form-select-sm">
-              <option value="recent">Most Recent</option>
-              <option value="oldest">Oldest First</option>
-              <option value="alphabetical">Alphabetical</option>
-              <option value="type">By Type</option>
-            </select>
-          </div>
-          
-          <div id="historyList" class="mt-2" style="max-height: 300px; overflow-y: auto;"></div>
-        </div>
-        
-        <!-- Watchlist Section -->
-        <div class="card p-3 mb-3">
-          <h6><i class="fa-solid fa-eye"></i> Watchlist</h6>
-          <div class="input-group input-group-sm mb-2">
-            <input id="watchlistInput" class="form-control" placeholder="Add to watchlist" />
-            <button id="addToWatchlist" class="btn btn-outline-primary"><i class="fa-solid fa-plus"></i></button>
-          </div>
-          <div id="watchlistItems" style="max-height: 200px; overflow-y: auto;"></div>
-          <div class="mt-2">
-            <button id="monitorWatchlist" class="btn btn-sm btn-outline-success w-100">
-              <i class="fa-solid fa-refresh"></i> Monitor All
-            </button>
-          </div>
-        </div>
-        
-        <!-- Stats Section -->
-        <div class="card p-3">
-          <h6><i class="fa-solid fa-chart-simple"></i> Investigation Stats</h6>
-          <div id="statsContainer">
-            <div class="row text-center">
-              <div class="col-6">
-                <div class="h6 text-primary mb-0" id="totalSearches">0</div>
-                <small class="text-muted">Total Searches</small>
-              </div>
-              <div class="col-6">
-                <div class="h6 text-success mb-0" id="foundResults">0</div>
-                <small class="text-muted">Found Results</small>
+
+            <!-- Bulk Search Toggle -->
+            <div class="mb-3">
+              <button class="btn btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#bulkSearch" aria-expanded="false" style="border-radius: 0.5rem;">
+                <i class="fas fa-layer-group me-2"></i>Bulk Search & Export
+              </button>
+            </div>
+
+            <!-- Bulk Search Interface -->
+            <div class="collapse" id="bulkSearch">
+              <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, var(--gray-50) 0%, var(--light-blue) 100%); border-radius: 1rem;">
+                <div class="card-body">
+                  <h6 class="text-primary mb-3">
+                    <i class="fas fa-layer-group me-2"></i>
+                    Bulk Investigation
+                  </h6>
+                  <div class="row g-3 mb-3">
+                    <div class="col-md-8">
+                      <textarea id="bulkInput" class="form-control" rows="4" 
+                                placeholder="Enter multiple items (one per line):&#10;john.smith@email.com&#10;alice123&#10;+1234567890&#10;Jane Doe"
+                                style="border-radius: 0.75rem; border: 2px solid var(--gray-200); background: white;"></textarea>
+                    </div>
+                    <div class="col-md-4">
+                      <select id="bulkType" class="form-select mb-3" style="border-radius: 0.5rem;">
+                        <option value="auto">Auto-detect type</option>
+                        <option value="username">Usernames only</option>
+                        <option value="email">Emails only</option>
+                        <option value="phone">Phone numbers only</option>
+                        <option value="name">Names only</option>
+                      </select>
+                      <button id="bulkSearchBtn" class="btn btn-success w-100" style="border-radius: 0.5rem;">
+                        <i class="fas fa-search me-2"></i>Bulk Search
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <!-- Export Options -->
+                  <div id="exportSection" class="d-none">
+                    <hr style="border-color: var(--gray-300);">
+                    <h6 class="text-success mb-3">
+                      <i class="fas fa-download me-2"></i>Export Results
+                    </h6>
+                    <div class="d-flex gap-2 flex-wrap">
+                      <button id="exportJson" class="btn btn-outline-primary btn-sm" style="border-radius: 0.5rem;">
+                        <i class="fas fa-file-code me-2"></i>Export JSON
+                      </button>
+                      <button id="exportCsv" class="btn btn-outline-success btn-sm" style="border-radius: 0.5rem;">
+                        <i class="fas fa-file-csv me-2"></i>Export CSV
+                      </button>
+                      <span id="exportStatus" class="text-muted ms-2 align-self-center"></span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
+
+            <!-- Status and Results Area -->
+            <div id="statusArea" class="mt-4"></div>
+            <div id="resultsGrid" class="d-flex flex-wrap gap-3 mt-4"></div>
           </div>
-          <hr/>
-          <h6>Features</h6>
-          <ul class="small mb-0">
-            <li>✅ Multi-type investigation</li>
-            <li>✅ Bulk search & export</li>
-            <li>✅ Enhanced social media analysis</li>
-            <li>✅ Watchlist monitoring</li>
-          </ul>
+        </div>
+
+        <!-- Sidebar Content -->
+        <div class="col-lg-4">
+          <!-- Recent Searches -->
+          <div class="custom-card p-4 mb-4">
+            <h6 class="text-primary mb-3">
+              <i class="fas fa-history me-2"></i>Recent Searches
+            </h6>
+            
+            <!-- Search Filters -->
+            <div class="mb-3">
+              <div class="d-flex gap-1 mb-2 flex-wrap">
+                <button class="btn btn-sm btn-outline-secondary filter-btn active" data-filter="all" style="border-radius: 0.5rem;">All</button>
+                <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="email" style="border-radius: 0.5rem;">Email</button>
+                <button class="btn btn-sm btn-outline-success filter-btn" data-filter="phone" style="border-radius: 0.5rem;">Phone</button>
+                <button class="btn btn-sm btn-outline-danger filter-btn" data-filter="ip" style="border-radius: 0.5rem;">IP</button>
+                <button class="btn btn-sm btn-outline-info filter-btn" data-filter="name" style="border-radius: 0.5rem;">Name</button>
+                <button class="btn btn-sm btn-outline-warning filter-btn" data-filter="username" style="border-radius: 0.5rem;">Username</button>
+              </div>
+              <select id="sortHistory" class="form-select form-select-sm" style="border-radius: 0.5rem;">
+                <option value="recent">Most Recent</option>
+                <option value="oldest">Oldest First</option>
+                <option value="alphabetical">Alphabetical</option>
+                <option value="type">By Type</option>
+              </select>
+            </div>
+            
+            <div id="historyList" class="mt-2" style="max-height: 300px; overflow-y: auto;"></div>
+          </div>
+        
+          <!-- Watchlist Section -->
+          <div class="custom-card p-4 mb-4">
+            <h6 class="text-primary mb-3">
+              <i class="fas fa-eye me-2"></i>Watchlist
+            </h6>
+            <div class="input-group input-group-sm mb-3">
+              <input id="watchlistInput" class="form-control" placeholder="Add to watchlist" style="border-radius: 0.5rem 0 0 0.5rem;" />
+              <button id="addToWatchlist" class="btn btn-outline-primary" style="border-radius: 0 0.5rem 0.5rem 0;">
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
+            <div id="watchlistItems" style="max-height: 200px; overflow-y: auto;"></div>
+            <div class="mt-3">
+              <button id="monitorWatchlist" class="btn btn-sm btn-success w-100" style="border-radius: 0.5rem;">
+                <i class="fas fa-sync-alt me-2"></i>Monitor All
+              </button>
+            </div>
+          </div>
+        
+          <!-- Stats Section -->
+          <div class="custom-card p-4">
+            <h6 class="text-primary mb-3">
+              <i class="fas fa-chart-simple me-2"></i>Investigation Stats
+            </h6>
+            <div id="statsContainer">
+              <div class="row text-center">
+                <div class="col-6">
+                  <div class="p-3 rounded" style="background: linear-gradient(135deg, var(--light-blue) 0%, rgba(59, 130, 246, 0.1) 100%);">
+                    <div class="h4 text-primary mb-0" id="totalSearches">0</div>
+                    <small class="text-muted">Total Searches</small>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="p-3 rounded" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);">
+                    <div class="h4 text-success mb-0" id="foundResults">0</div>
+                    <small class="text-muted">Found Results</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <hr style="border-color: var(--gray-300);"/>
+            <h6 class="text-primary">Features</h6>
+            <ul class="small mb-0" style="line-height: 1.6;">
+              <li><i class="fas fa-check text-success me-2"></i>Multi-type investigation</li>
+              <li><i class="fas fa-check text-success me-2"></i>Bulk search & export</li>
+              <li><i class="fas fa-check text-success me-2"></i>Enhanced social media analysis</li>
+              <li><i class="fas fa-check text-success me-2"></i>Watchlist monitoring</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 mb-4">
+          <h6 class="mb-3">
+            <i class="fas fa-search-plus me-2"></i>
+            OSINT Portal
+          </h6>
+          <p class="text-muted small">
+            A comprehensive investigation toolkit for digital intelligence gathering. 
+            Built for security professionals and researchers.
+          </p>
+        </div>
+        <div class="col-md-4 mb-4">
+          <h6 class="mb-3">Features</h6>
+          <ul class="list-unstyled small">
+            <li><a href="#" class="text-decoration-none"><i class="fas fa-user me-2"></i>Username Investigation</a></li>
+            <li><a href="#" class="text-decoration-none"><i class="fas fa-envelope me-2"></i>Email Analysis</a></li>
+            <li><a href="#" class="text-decoration-none"><i class="fas fa-phone me-2"></i>Phone Number Lookup</a></li>
+            <li><a href="#" class="text-decoration-none"><i class="fas fa-globe me-2"></i>IP Address Investigation</a></li>
+          </ul>
+        </div>
+        <div class="col-md-4 mb-4">
+          <h6 class="mb-3">Resources</h6>
+          <ul class="list-unstyled small">
+            <li><a href="#" class="text-decoration-none"><i class="fas fa-question-circle me-2"></i>Help & Documentation</a></li>
+            <li><a href="#" class="text-decoration-none"><i class="fas fa-shield-alt me-2"></i>Privacy Policy</a></li>
+            <li><a href="#" class="text-decoration-none"><i class="fas fa-code me-2"></i>API Documentation</a></li>
+            <li><a href="#" class="text-decoration-none"><i class="fas fa-bug me-2"></i>Report Issues</a></li>
+          </ul>
+        </div>
+      </div>
+      <hr class="my-4" style="border-color: var(--gray-600);">
+      <div class="row align-items-center">
+        <div class="col-md-6">
+          <p class="text-muted small mb-0">
+            © 2024 OSINT Portal. Built for educational and research purposes.
+          </p>
+        </div>
+        <div class="col-md-6 text-end">
+          <p class="text-muted small mb-0">
+            <i class="fas fa-code me-2"></i>
+            Version 2.0 - Enhanced UI
+          </p>
+        </div>
+      </div>
+    </div>
+  </footer>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Sidebar functionality
+    document.getElementById('sidebarToggle')?.addEventListener('click', function() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      const mainContent = document.getElementById('mainContent');
+      
+      sidebar.classList.toggle('show');
+      overlay.classList.toggle('show');
+      
+      // Only shift content on larger screens
+      if (window.innerWidth >= 992) {
+        mainContent.classList.toggle('content-shift');
+      }
+    });
+
+    // Close sidebar when clicking overlay
+    document.getElementById('sidebarOverlay')?.addEventListener('click', function() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      const mainContent = document.getElementById('mainContent');
+      
+      sidebar.classList.remove('show');
+      overlay.classList.remove('show');
+      mainContent.classList.remove('content-shift');
+    });
+
+    // Navigation functionality
+    function setActiveSection(section) {
+      // Remove active class from all nav links
+      document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+        link.classList.remove('active');
+      });
+      
+      // Add active class to clicked link
+      document.querySelector(`[onclick="setActiveSection('${section}')"]`)?.classList.add('active');
+      
+      // Close sidebar on mobile after selection
+      if (window.innerWidth < 992) {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        sidebar.classList.remove('show');
+        overlay.classList.remove('show');
+      }
+    }
+
+    // Handle window resize
+    window.addEventListener('resize', function() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      const mainContent = document.getElementById('mainContent');
+      
+      if (window.innerWidth >= 992) {
+        overlay.classList.remove('show');
+      } else {
+        mainContent.classList.remove('content-shift');
+      }
+    });
+  </script>
   <script src="/static/app.js"></script>
 </body>
 </html>

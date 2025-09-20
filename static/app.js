@@ -169,6 +169,69 @@ function clearResults() {
   statusArea.innerHTML = "";
 }
 
+function showLoadingSpinner(message = "Loading...") {
+  return `
+    <div class="d-flex justify-content-center align-items-center py-5">
+      <div class="text-center">
+        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="h6 text-muted">${message}</div>
+        <div class="text-muted small">Please wait while we process your request...</div>
+      </div>
+    </div>
+  `;
+}
+
+function showSuccessAlert(message, type = "success") {
+  const alertClass = type === "success" ? "alert-success" : type === "warning" ? "alert-warning" : "alert-danger";
+  const icon = type === "success" ? "fas fa-check-circle" : type === "warning" ? "fas fa-exclamation-triangle" : "fas fa-times-circle";
+  
+  return `
+    <div class="alert ${alertClass} alert-dismissible fade show shadow-sm" role="alert" style="border-radius: 0.75rem; border: none;">
+      <i class="${icon} me-2"></i>
+      ${message}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  `;
+}
+
+function createModernCard(title, subtitle, status, content, options = {}) {
+  const cardClass = options.highlighted ? "custom-card border-primary" : "custom-card";
+  const statusColor = status === "success" ? "text-success" : status === "error" ? "text-danger" : "text-warning";
+  const statusIcon = status === "success" ? "fas fa-check-circle" : status === "error" ? "fas fa-times-circle" : "fas fa-exclamation-triangle";
+  
+  return `
+    <div class="${cardClass} mb-3 h-100" style="transition: all 0.3s ease; border-radius: 1rem; overflow: hidden;">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <div class="flex-grow-1">
+            <h6 class="card-title mb-1 text-primary" style="font-weight: 600;">
+              ${options.icon ? `<i class="${options.icon} me-2"></i>` : ''}
+              ${title}
+            </h6>
+            ${subtitle ? `<p class="text-muted small mb-0">${subtitle}</p>` : ''}
+          </div>
+          <div class="text-end">
+            <span class="${statusColor}">
+              <i class="${statusIcon} me-1"></i>
+              ${status.charAt(0).toUpperCase() + status.slice(1)}
+            </span>
+          </div>
+        </div>
+        <div class="card-content">
+          ${content}
+        </div>
+        ${options.actions ? `
+          <div class="card-actions mt-3 pt-3 border-top">
+            ${options.actions}
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
 function renderResults(username, resultObj) {
   clearResults();
   const title = el("div", "mb-2");
@@ -204,32 +267,55 @@ function renderResults(username, resultObj) {
 function renderUsernameResults(usernameData, username) {
   // Handle username results (social media platforms)
   for (const [platform, info] of Object.entries(usernameData)) {
-    const card = el("div", "card card-platform p-2 shadow-sm");
-    const body = el("div", "card-body p-2");
-    const row = el("div", "d-flex justify-content-between align-items-start");
-    const left = el("div", "");
-    left.innerHTML = `<div style="font-weight:600">${platform}</div>
-                      <div class="text-muted" style="font-size:0.85rem">${info.url || 'N/A'}</div>`;
-    const right = el("div", "");
-    if (info.exists) {
-      right.innerHTML = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> Found</div>
-                         <a class="btn btn-sm btn-outline-primary mt-2" target="_blank" href="${info.url}"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>`;
-    } else {
-      right.innerHTML = `<div class="result-no"><i class="fa-regular fa-circle-xmark"></i> Not found</div>`;
-    }
-    row.appendChild(left);
-    row.appendChild(right);
-    body.appendChild(row);
-    card.appendChild(body);
-    resultsGrid.appendChild(card);
+    const status = info.exists ? "success" : "warning";
+    const content = `
+      <div class="row align-items-center">
+        <div class="col-8">
+          <div class="text-muted small mb-1">Platform URL</div>
+          <div class="text-truncate">
+            ${info.url ? `<a href="${info.url}" target="_blank" class="text-decoration-none">${info.url}</a>` : 'N/A'}
+          </div>
+        </div>
+        <div class="col-4 text-end">
+          ${info.exists ? `
+            <a class="btn btn-primary btn-sm" target="_blank" href="${info.url}">
+              <i class="fas fa-external-link-alt me-1"></i>View
+            </a>
+          ` : '<span class="text-muted">Not found</span>'}
+        </div>
+      </div>
+    `;
+    
+    const cardHtml = createModernCard(
+      platform,
+      "Social media platform check",
+      status,
+      content,
+      {
+        icon: "fas fa-user",
+        highlighted: info.exists
+      }
+    );
+    
+    resultsGrid.insertAdjacentHTML('beforeend', cardHtml);
   }
   
   // Add Enhanced Analysis button for username results
-  const enhancedBtn = el("div", "text-center mt-3");
-  enhancedBtn.innerHTML = `<button class="btn btn-outline-success" onclick="runEnhancedAnalysis('${username}')">
-                             <i class="fa-solid fa-search-plus"></i> Run Enhanced Social Media Analysis
-                           </button>`;
-  resultsGrid.appendChild(enhancedBtn);
+  const enhancedAnalysisCard = `
+    <div class="custom-card mb-3">
+      <div class="card-body p-4 text-center">
+        <h6 class="text-primary mb-3">
+          <i class="fas fa-microscope me-2"></i>
+          Enhanced Analysis Available
+        </h6>
+        <p class="text-muted mb-3">Get deeper insights with our advanced social media analysis engine</p>
+        <button class="btn btn-success btn-lg" onclick="runEnhancedAnalysis('${username}')" style="border-radius: 0.75rem;">
+          <i class="fas fa-search-plus me-2"></i>Run Enhanced Analysis
+        </button>
+      </div>
+    </div>
+  `;
+  resultsGrid.insertAdjacentHTML('beforeend', enhancedAnalysisCard);
 }
 
 function renderEnhancedUsernameResults(resultObj) {
@@ -1166,7 +1252,8 @@ form.addEventListener("submit", async (e) => {
   const username = usernameInput.value.trim();
   if (!username) return;
   clearResults();
-  statusArea.innerHTML = `<div class="spinner-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div> <div class="ms-2">Checking ${username}…</div></div>`;
+  statusArea.innerHTML = showLoadingSpinner(`Investigating ${username}...`);
+  
   try {
     const res = await fetch("/api/check", {
       method: "POST",
@@ -1174,33 +1261,34 @@ form.addEventListener("submit", async (e) => {
       body: JSON.stringify({ username })
     });
     const j = await res.json();
+    
     if (res.ok) {
+      // Show success message briefly
+      statusArea.innerHTML = showSuccessAlert(`Investigation completed for ${username}`, "success");
+      setTimeout(() => {
+        statusArea.innerHTML = "";
+      }, 3000);
+      
       // Handle different response types
       if (j.type === "email") {
-        // Email response
         renderResults(username, j);
       } else if (j.type === "phone") {
-        // Phone number response
         renderResults(username, j);
       } else if (j.type === "name") {
-        // Name investigation response
         renderResults(username, j);
       } else if (j.type === "enhanced_username") {
-        // Enhanced username response
         renderResults(username, j);
       } else if (j.username && j.results) {
-        // Username response (social media)
         renderResults(j.username, j.results);
       } else {
-        // Fallback for other formats
         renderResults(username, j);
       }
-      fetchHistory(); // refresh sidebar
+      fetchHistory();
     } else {
-      statusArea.innerHTML = `<div class="text-danger">${j.error || 'Error'}</div>`;
+      statusArea.innerHTML = showSuccessAlert(j.error || 'Investigation failed', "danger");
     }
   } catch (err) {
-    statusArea.innerHTML = `<div class="text-danger">Network error</div>`;
+    statusArea.innerHTML = showSuccessAlert('Network error - please try again', "danger");
   }
 });
 
@@ -1209,17 +1297,17 @@ async function runBulkSearch() {
   const searchType = bulkType.value;
   
   if (items.length === 0) {
-    alert('Please enter at least one item to search');
+    statusArea.innerHTML = showSuccessAlert('Please enter at least one item to search', "warning");
     return;
   }
   
   if (items.length > 50) {
-    alert('Maximum 50 items allowed for bulk search');
+    statusArea.innerHTML = showSuccessAlert('Maximum 50 items allowed for bulk search', "warning");
     return;
   }
   
   clearResults();
-  statusArea.innerHTML = `<div class="spinner-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div> <div class="ms-2">Processing ${items.length} items...</div></div>`;
+  statusArea.innerHTML = showLoadingSpinner(`Processing ${items.length} items...`);
   
   try {
     const res = await fetch("/api/bulk-search", {
@@ -1231,14 +1319,24 @@ async function runBulkSearch() {
     
     if (res.ok) {
       currentBulkResults = j.bulk_results;
+      
+      // Show success message
+      statusArea.innerHTML = showSuccessAlert(
+        `Bulk search completed: ${j.summary.successful}/${j.summary.total_items} successful`, 
+        "success"
+      );
+      setTimeout(() => {
+        statusArea.innerHTML = "";
+      }, 3000);
+      
       renderBulkResults(j);
       exportSection.classList.remove('d-none');
       fetchHistory();
     } else {
-      statusArea.innerHTML = `<div class="text-danger">${j.error || 'Bulk search failed'}</div>`;
+      statusArea.innerHTML = showSuccessAlert(j.error || 'Bulk search failed', "danger");
     }
   } catch (err) {
-    statusArea.innerHTML = `<div class="text-danger">Network error during bulk search</div>`;
+    statusArea.innerHTML = showSuccessAlert('Network error during bulk search', "danger");
   }
 }
 
@@ -1247,61 +1345,92 @@ function renderBulkResults(bulkData) {
   const summary = bulkData.summary;
   
   // Summary Card
-  const summaryCard = el("div", "card card-platform p-2 shadow-sm bg-info");
-  const summaryBody = el("div", "card-body p-2");
-  summaryBody.innerHTML = `
-    <div class="d-flex justify-content-between align-items-start text-white">
-      <div>
-        <div style="font-weight:600"><i class="fa-solid fa-chart-bar"></i> Bulk Search Summary</div>
-        <div style="font-size:0.85rem">Processed ${summary.total_items} items</div>
+  const summaryContent = `
+    <div class="row text-center">
+      <div class="col-md-3">
+        <div class="h4 text-primary mb-0">${summary.total_items}</div>
+        <small class="text-muted">Total Items</small>
       </div>
-      <div class="text-end">
-        <div style="font-weight:600">${summary.successful}/${summary.total_items} Successful</div>
-        <div style="font-size:0.85rem">${summary.failed} failed • Type: ${summary.search_type}</div>
+      <div class="col-md-3">
+        <div class="h4 text-success mb-0">${summary.successful}</div>
+        <small class="text-muted">Successful</small>
+      </div>
+      <div class="col-md-3">
+        <div class="h4 text-danger mb-0">${summary.failed}</div>
+        <small class="text-muted">Failed</small>
+      </div>
+      <div class="col-md-3">
+        <div class="h4 text-info mb-0">${summary.search_type}</div>
+        <small class="text-muted">Search Type</small>
       </div>
     </div>
   `;
-  summaryCard.appendChild(summaryBody);
-  resultsGrid.appendChild(summaryCard);
+  
+  const summaryCard = createModernCard(
+    "Bulk Search Summary",
+    `Processed ${summary.total_items} items with ${((summary.successful/summary.total_items)*100).toFixed(1)}% success rate`,
+    "success",
+    summaryContent,
+    {
+      icon: "fas fa-chart-bar",
+      highlighted: true
+    }
+  );
+  
+  resultsGrid.insertAdjacentHTML('beforeend', summaryCard);
   
   // Individual Results
   bulkData.bulk_results.forEach((result, index) => {
-    const card = el("div", "card card-platform p-2 shadow-sm");
-    const body = el("div", "card-body p-2");
-    const row = el("div", "d-flex justify-content-between align-items-start");
-    const left = el("div", "");
-    left.innerHTML = `<div style="font-weight:600">${index + 1}. ${result.item}</div>
-                      <div class="text-muted" style="font-size:0.85rem">Type: ${result.type}</div>`;
-    const right = el("div", "");
+    let details = "";
+    const status = result.status === "success" ? "success" : "error";
     
     if (result.status === "success") {
-      let details = "";
       if (result.type === "username") {
         const foundPlatforms = Object.entries(result.result).filter(([_, info]) => info.exists).length;
-        details = `Found on ${foundPlatforms} platforms`;
+        details = `Found on ${foundPlatforms} social media platforms`;
       } else if (result.type === "email" && result.result.ok) {
-        details = `Valid email • ${result.result.data.domain}`;
+        details = `Valid email from ${result.result.data.domain}`;
       } else if (result.type === "phone" && result.result.ok) {
-        details = result.result.data.valid ? `Valid • ${result.result.data.carrier}` : "Invalid number";
+        details = result.result.data.valid ? `Valid number - ${result.result.data.carrier}` : "Invalid phone number";
       } else if (result.type === "name" && result.result.ok) {
-        details = `${result.result.data.variations.length} name variations`;
+        details = `Found ${result.result.data.variations.length} name variations`;
       } else {
-        details = "Processed successfully";
+        details = "Investigation completed successfully";
       }
-      
-      right.innerHTML = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> Success</div>
-                         <div class="text-muted mt-1" style="font-size: 0.85rem;">${details}</div>`;
     } else {
-      const errorMsg = result.result.error || "Failed";
-      right.innerHTML = `<div class="result-no"><i class="fa-solid fa-exclamation-triangle"></i> Failed</div>
-                         <div class="text-muted mt-1" style="font-size: 0.85rem;">${errorMsg}</div>`;
+      details = result.result.error || "Investigation failed";
     }
     
-    row.appendChild(left);
-    row.appendChild(right);
-    body.appendChild(row);
-    card.appendChild(body);
-    resultsGrid.appendChild(card);
+    const content = `
+      <div class="row align-items-center">
+        <div class="col-8">
+          <div class="text-muted small mb-1">Investigation Type</div>
+          <div class="badge bg-secondary">${result.type}</div>
+        </div>
+        <div class="col-4 text-end">
+          <div class="small text-muted">#${index + 1}</div>
+        </div>
+      </div>
+      <div class="mt-2">
+        <div class="text-muted small">Details</div>
+        <div class="small">${details}</div>
+      </div>
+    `;
+    
+    const resultCard = createModernCard(
+      result.item,
+      `Investigation result for ${result.type}`,
+      status,
+      content,
+      {
+        icon: result.type === "email" ? "fas fa-envelope" : 
+              result.type === "phone" ? "fas fa-phone" :
+              result.type === "ip" ? "fas fa-globe" :
+              result.type === "name" ? "fas fa-user" : "fas fa-at"
+      }
+    );
+    
+    resultsGrid.insertAdjacentHTML('beforeend', resultCard);
   });
 }
 
