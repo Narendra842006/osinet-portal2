@@ -1,3 +1,5 @@
 Flask==2.3.2
 requests==2.31.0
 reportlab==4.0.4
+dnspython==2.8.0
+gunicorn==21.2.0
