@@ -1104,124 +1104,341 @@ function renderNameResults(resultObj) {
   
   if (!nameCheck.ok) {
     // Show error
-    const card = el("div", "card card-platform p-2 shadow-sm");
-    const body = el("div", "card-body p-2");
-    body.innerHTML = `<div class="text-danger"><i class="fa-solid fa-exclamation-triangle"></i> ${nameCheck.error}</div>`;
-    card.appendChild(body);
-    resultsGrid.appendChild(card);
+    const errorContent = `
+      <div class="text-danger">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        ${nameCheck.error}
+      </div>
+    `;
+    const errorCard = createModernCard(
+      "Investigation Error",
+      "Name investigation could not be completed",
+      "error",
+      errorContent,
+      { icon: "fas fa-exclamation-triangle" }
+    );
+    resultsGrid.insertAdjacentHTML('beforeend', errorCard);
     return;
   }
   
   const data = nameCheck.data;
   
-  // Name Variations Card
-  const variationsCard = el("div", "card card-platform p-2 shadow-sm");
-  const variationsBody = el("div", "card-body p-2");
-  const variationsRow = el("div", "d-flex justify-content-between align-items-start");
-  const variationsLeft = el("div", "");
-  variationsLeft.innerHTML = `<div style="font-weight:600">🔤 Name Variations</div>
-                              <div class="text-muted" style="font-size:0.85rem">Common name formats and variations</div>`;
-  const variationsRight = el("div", "");
-  variationsRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-list"></i> ${data.variations.length} Variations</div>
-                               <div class="text-muted mt-2" style="font-size: 0.9rem;">
-                                 ${data.variations.slice(0, 5).map(v => `<span class="badge bg-light text-dark me-1">${v}</span>`).join('')}
-                               </div>`;
-  variationsRow.appendChild(variationsLeft);
-  variationsRow.appendChild(variationsRight);
-  variationsBody.appendChild(variationsRow);
-  variationsCard.appendChild(variationsBody);
-  resultsGrid.appendChild(variationsCard);
+  // Investigation Overview Header
+  const overviewContent = `
+    <div class="row align-items-center">
+      <div class="col-md-8">
+        <div class="mb-2">
+          <span class="badge bg-primary px-3 py-2">
+            <i class="fas fa-user me-2"></i>Person Investigation
+          </span>
+        </div>
+        <h6 class="mb-1">Investigating: <strong class="text-primary">${data.name}</strong></h6>
+        <p class="text-muted small mb-0">
+          Found ${data.variations.length} name variations across multiple data sources
+        </p>
+      </div>
+      <div class="col-md-4 text-end">
+        <div class="text-success">
+          <i class="fas fa-check-circle fs-4"></i>
+        </div>
+        <small class="text-muted">Investigation Complete</small>
+      </div>
+    </div>
+  `;
   
-  // Professional Networks Card
-  const professionalCard = el("div", "card card-platform p-2 shadow-sm");
-  const professionalBody = el("div", "card-body p-2");
-  const professionalRow = el("div", "d-flex justify-content-between align-items-start");
-  const professionalLeft = el("div", "");
-  professionalLeft.innerHTML = `<div style="font-weight:600">💼 Professional Networks</div>
-                                <div class="text-muted" style="font-size:0.85rem">LinkedIn, AngelList, Research profiles</div>`;
-  const professionalRight = el("div", "");
+  const overviewCard = createModernCard(
+    "Name Investigation Summary",
+    "Comprehensive analysis results",
+    "success",
+    overviewContent,
+    { 
+      icon: "fas fa-user-detective",
+      highlighted: true
+    }
+  );
+  resultsGrid.insertAdjacentHTML('beforeend', overviewCard);
+
+  // Section 1: Social Profiles
+  renderSocialProfilesSection(data);
   
-  const foundProfiles = Object.values(data.professional_networks).filter(p => p.found).length;
-  if (foundProfiles > 0) {
-    professionalRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-check-circle"></i> ${foundProfiles} Profiles Found</div>
-                                   <div class="text-muted mt-2" style="font-size: 0.9rem;">
-                                     ${Object.entries(data.professional_networks)
-                                       .filter(([_, p]) => p.found)
-                                       .map(([platform, p]) => `<strong>${platform}:</strong> Found<br>`)
-                                       .join('')}
-                                   </div>`;
+  // Section 2: Related Links  
+  renderRelatedLinksSection(data);
+  
+  // Section 3: Other Matches
+  renderOtherMatchesSection(data);
+  
+  // Store data for export and create export button
+  window.currentNameData = data;
+  const exportButton = `
+    <div class="custom-card mb-3">
+      <div class="card-body p-4 text-center">
+        <button class="btn btn-success btn-lg px-5" onclick="exportResult(window.currentNameData, 'name', '${data.name || 'unknown'}')" style="border-radius: 0.75rem;">
+          <i class="fas fa-download me-2"></i>Export Complete Report
+        </button>
+      </div>
+    </div>
+  `;
+  resultsGrid.insertAdjacentHTML('beforeend', exportButton);
+}
+
+function renderSocialProfilesSection(data) {
+  // Social Profiles Section Header
+  const sectionHeader = `
+    <div class="row mb-4">
+      <div class="col-12">
+        <h5 class="text-primary mb-3">
+          <i class="fas fa-users me-2"></i>Social Profiles
+        </h5>
+        <p class="text-muted small mb-0">Discovered social media handles and professional profiles</p>
+      </div>
+    </div>
+  `;
+  resultsGrid.insertAdjacentHTML('beforeend', `<div class="mb-4">${sectionHeader}</div>`);
+  
+  // Professional Networks Grid
+  const professionalProfiles = data.professional_networks;
+  const foundProfiles = Object.entries(professionalProfiles).filter(([_, profile]) => profile.found);
+  
+  if (foundProfiles.length > 0) {
+    const profilesRow = document.createElement('div');
+    profilesRow.className = 'row g-3 mb-4';
+    
+    foundProfiles.forEach(([platform, profile]) => {
+      const platformIcon = getPlatformIcon(platform);
+      const profileCard = `
+        <div class="col-lg-6">
+          <div class="custom-card h-100 profile-card" style="transition: all 0.3s ease; cursor: pointer;">
+            <div class="card-body p-3">
+              <div class="d-flex align-items-center">
+                <div class="me-3">
+                  <div class="bg-primary bg-opacity-10 rounded-circle p-3 d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                    <i class="${platformIcon} text-primary fs-5"></i>
+                  </div>
+                </div>
+                <div class="flex-grow-1">
+                  <h6 class="mb-1 text-primary">${platform}</h6>
+                  <p class="text-muted small mb-2">Professional Profile Found</p>
+                  ${profile.profiles && profile.profiles.length > 0 ? 
+                    profile.profiles.map(url => 
+                      `<a href="https://${url}" target="_blank" class="btn btn-outline-primary btn-sm me-2">
+                        <i class="fas fa-external-link-alt me-1"></i>View Profile
+                      </a>`
+                    ).join('') : 
+                    `<span class="badge bg-success">Profile Available</span>`
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      profilesRow.insertAdjacentHTML('beforeend', profileCard);
+    });
+    
+    resultsGrid.appendChild(profilesRow);
   } else {
-    professionalRight.innerHTML = `<div class="result-no"><i class="fa-regular fa-circle-xmark"></i> No Profiles Found</div>
-                                   <div class="text-muted mt-2" style="font-size: 0.9rem;">
-                                     <small>Demo simulation - Use real APIs for live data</small>
-                                   </div>`;
+    // No profiles found
+    const noProfilesCard = createModernCard(
+      "No Social Profiles Found",
+      "No professional network profiles discovered",
+      "warning",
+      `<div class="text-center py-3">
+        <i class="fas fa-user-slash text-muted fs-1 mb-3"></i>
+        <p class="text-muted">No profiles found on LinkedIn, AngelList, or other professional networks.</p>
+        <small class="text-muted">Try searching suggested usernames manually on social platforms.</small>
+      </div>`,
+      { icon: "fas fa-users" }
+    );
+    resultsGrid.insertAdjacentHTML('beforeend', noProfilesCard);
   }
+}
+
+function renderRelatedLinksSection(data) {
+  // Related Links Section Header
+  const sectionHeader = `
+    <div class="row mb-4 mt-5">
+      <div class="col-12">
+        <h5 class="text-primary mb-3">
+          <i class="fas fa-link me-2"></i>Related Links
+        </h5>
+        <p class="text-muted small mb-0">Potential usernames and social media suggestions</p>
+      </div>
+    </div>
+  `;
+  resultsGrid.insertAdjacentHTML('beforeend', `<div class="mb-4">${sectionHeader}</div>`);
   
-  professionalRow.appendChild(professionalLeft);
-  professionalRow.appendChild(professionalRight);
-  professionalBody.appendChild(professionalRow);
-  professionalCard.appendChild(professionalBody);
-  resultsGrid.appendChild(professionalCard);
+  // Username Suggestions Grid
+  if (data.username_suggestions && data.username_suggestions.length > 0) {
+    const suggestionsRow = document.createElement('div');
+    suggestionsRow.className = 'row g-3 mb-4';
+    
+    data.username_suggestions.forEach((username, index) => {
+      const suggestionCard = `
+        <div class="col-lg-4 col-md-6">
+          <div class="custom-card h-100 username-card" style="transition: all 0.3s ease; cursor: pointer;" onclick="searchUsername('${username}')">
+            <div class="card-body p-3 text-center">
+              <div class="mb-3">
+                <div class="bg-info bg-opacity-10 rounded-circle p-3 d-inline-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                  <i class="fas fa-at text-info fs-5"></i>
+                </div>
+              </div>
+              <h6 class="mb-2 text-primary">${username}</h6>
+              <p class="text-muted small mb-3">Suggested username</p>
+              <div class="d-flex gap-2 justify-content-center flex-wrap">
+                <a href="https://twitter.com/${username}" target="_blank" class="btn btn-outline-primary btn-sm">
+                  <i class="fab fa-twitter"></i>
+                </a>
+                <a href="https://instagram.com/${username}" target="_blank" class="btn btn-outline-primary btn-sm">
+                  <i class="fab fa-instagram"></i>
+                </a>
+                <a href="https://github.com/${username}" target="_blank" class="btn btn-outline-primary btn-sm">
+                  <i class="fab fa-github"></i>
+                </a>
+                <a href="https://linkedin.com/in/${username}" target="_blank" class="btn btn-outline-primary btn-sm">
+                  <i class="fab fa-linkedin"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      suggestionsRow.insertAdjacentHTML('beforeend', suggestionCard);
+    });
+    
+    resultsGrid.appendChild(suggestionsRow);
+  } else {
+    // No suggestions available
+    const noSuggestionsCard = createModernCard(
+      "No Username Suggestions",
+      "Unable to generate username variations",
+      "warning", 
+      `<div class="text-center py-3">
+        <i class="fas fa-question-circle text-muted fs-1 mb-3"></i>
+        <p class="text-muted">No username suggestions could be generated from this name.</p>
+      </div>`,
+      { icon: "fas fa-link" }
+    );
+    resultsGrid.insertAdjacentHTML('beforeend', noSuggestionsCard);
+  }
+}
+
+function renderOtherMatchesSection(data) {
+  // Other Matches Section Header
+  const sectionHeader = `
+    <div class="row mb-4 mt-5">
+      <div class="col-12">
+        <h5 class="text-primary mb-3">
+          <i class="fas fa-database me-2"></i>Other Matches
+        </h5>
+        <p class="text-muted small mb-0">Public records, name variations, and additional data</p>
+      </div>
+    </div>
+  `;
+  resultsGrid.insertAdjacentHTML('beforeend', `<div class="mb-4">${sectionHeader}</div>`);
+  
+  const otherMatchesRow = document.createElement('div');
+  otherMatchesRow.className = 'row g-3 mb-4';
+  
+  // Name Variations Card
+  const variationsContent = `
+    <div class="mb-3">
+      <h6 class="text-primary mb-2">
+        <i class="fas fa-list-alt me-2"></i>Name Variations
+      </h6>
+      <p class="text-muted small mb-3">Common name formats and variations</p>
+      <div class="d-flex flex-wrap gap-2">
+        ${data.variations.slice(0, 8).map(variation => 
+          `<span class="badge bg-light text-dark border px-2 py-1">${variation}</span>`
+        ).join('')}
+        ${data.variations.length > 8 ? 
+          `<span class="badge bg-secondary">+${data.variations.length - 8} more</span>` : 
+          ''
+        }
+      </div>
+    </div>
+  `;
+  
+  const variationsCard = `
+    <div class="col-lg-6">
+      <div class="custom-card h-100">
+        <div class="card-body p-4">
+          ${variationsContent}
+        </div>
+      </div>
+    </div>
+  `;
   
   // Public Records Card
-  const recordsCard = el("div", "card card-platform p-2 shadow-sm");
-  const recordsBody = el("div", "card-body p-2");
-  const recordsRow = el("div", "d-flex justify-content-between align-items-start");
-  const recordsLeft = el("div", "");
-  recordsLeft.innerHTML = `<div style="font-weight:600">📋 Public Records</div>
-                           <div class="text-muted" style="font-size:0.85rem">Voter, property, court, business records</div>`;
-  const recordsRight = el("div", "");
-  
   const records = data.public_records;
-  const foundRecords = Object.entries(records).filter(([key, val]) => val.found && key !== 'variations_checked' && key !== 'name_variations').length;
+  const foundRecords = Object.entries(records).filter(([key, val]) => val.found && !['variations_checked', 'name_variations'].includes(key));
   
-  if (foundRecords > 0) {
-    recordsRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-file-text"></i> ${foundRecords} Records Found</div>
-                              <div class="text-muted mt-2" style="font-size: 0.9rem;">
-                                ${records.voter_records.found ? '<strong>✓</strong> Voter Records<br>' : ''}
-                                ${records.property_records.found ? '<strong>✓</strong> Property Records<br>' : ''}
-                                ${records.court_records.found ? '<strong>✓</strong> Court Records<br>' : ''}
-                                ${records.business_filings.found ? '<strong>✓</strong> Business Filings<br>' : ''}
-                                <small>Checked ${records.variations_checked} name variations</small>
-                              </div>`;
-  } else {
-    recordsRight.innerHTML = `<div class="result-no"><i class="fa-regular fa-circle-xmark"></i> No Records Found</div>
-                              <div class="text-muted mt-2" style="font-size: 0.9rem;">
-                                <small>Demo simulation - Use real APIs for live data</small>
-                              </div>`;
-  }
+  const recordsContent = `
+    <div class="mb-3">
+      <h6 class="text-primary mb-2">
+        <i class="fas fa-file-alt me-2"></i>Public Records
+      </h6>
+      <p class="text-muted small mb-3">Government and public database searches</p>
+      ${foundRecords.length > 0 ? `
+        <div class="mb-3">
+          ${foundRecords.map(([recordType, data]) => {
+            const recordName = recordType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            return `
+              <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-check-circle text-success me-2"></i>
+                <span class="fw-medium">${recordName}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        <div class="bg-success bg-opacity-10 border border-success border-opacity-25 rounded p-3">
+          <small class="text-success fw-medium">
+            <i class="fas fa-info-circle me-1"></i>
+            Found ${foundRecords.length} record type(s) across ${records.variations_checked || 0} name variations
+          </small>
+        </div>
+      ` : `
+        <div class="text-center py-3">
+          <i class="fas fa-file-excel text-muted fs-4 mb-2"></i>
+          <p class="text-muted mb-1">No public records found</p>
+          <small class="text-muted">Searched ${records.variations_checked || 0} name variations</small>
+        </div>
+      `}
+    </div>
+  `;
   
-  recordsRow.appendChild(recordsLeft);
-  recordsRow.appendChild(recordsRight);
-  recordsBody.appendChild(recordsRow);
-  recordsCard.appendChild(recordsBody);
-  resultsGrid.appendChild(recordsCard);
+  const recordsCard = `
+    <div class="col-lg-6">
+      <div class="custom-card h-100">
+        <div class="card-body p-4">
+          ${recordsContent}
+        </div>
+      </div>
+    </div>
+  `;
   
-  // Username Suggestions Card
-  const suggestionsCard = el("div", "card card-platform p-2 shadow-sm");
-  const suggestionsBody = el("div", "card-body p-2");
-  const suggestionsRow = el("div", "d-flex justify-content-between align-items-start");
-  const suggestionsLeft = el("div", "");
-  suggestionsLeft.innerHTML = `<div style="font-weight:600">💡 Username Suggestions</div>
-                               <div class="text-muted" style="font-size:0.85rem">Potential social media usernames</div>`;
-  const suggestionsRight = el("div", "");
-  suggestionsRight.innerHTML = `<div class="result-yes"><i class="fa-solid fa-lightbulb"></i> ${data.username_suggestions.length} Suggestions</div>
-                                <div class="text-muted mt-2" style="font-size: 0.9rem;">
-                                  ${data.username_suggestions.map(u => `<span class="badge bg-secondary me-1">${u}</span>`).join('')}
-                                </div>`;
-  
-  suggestionsRow.appendChild(suggestionsLeft);
-  suggestionsRow.appendChild(suggestionsRight);
-  suggestionsBody.appendChild(suggestionsRow);
-  suggestionsCard.appendChild(suggestionsBody);
-  resultsGrid.appendChild(suggestionsCard);
+  otherMatchesRow.insertAdjacentHTML('beforeend', variationsCard);
+  otherMatchesRow.insertAdjacentHTML('beforeend', recordsCard);
+  resultsGrid.appendChild(otherMatchesRow);
+}
 
-  // Add Export Button
-  const exportButton = el("button", "btn btn-primary mt-2 mb-3");
-  exportButton.innerHTML = '<i class="fa-solid fa-download"></i> Export Results';
-  exportButton.style.cssText = 'width: 100%; background: linear-gradient(45deg, #6f42c1, #5a32a3); border: none;';
-  exportButton.onclick = () => exportResult(data, 'name', data.name || 'unknown');
-  resultsGrid.appendChild(exportButton);
+function getPlatformIcon(platform) {
+  const icons = {
+    'LinkedIn': 'fab fa-linkedin',
+    'AngelList': 'fas fa-angel',
+    'Crunchbase': 'fas fa-building',
+    'ResearchGate': 'fas fa-graduation-cap',
+    'GitHub': 'fab fa-github',
+    'Twitter': 'fab fa-twitter',
+    'Instagram': 'fab fa-instagram',
+    'Facebook': 'fab fa-facebook'
+  };
+  return icons[platform] || 'fas fa-user';
+}
+
+function searchUsername(username) {
+  // Fill the search input and trigger search
+  document.getElementById('usernameInput').value = username;
+  document.getElementById('searchForm').dispatchEvent(new Event('submit'));
 }
 
 async function runEnhancedAnalysis(username) {

@@ -72,6 +72,16 @@
       min-height: 100vh;
     }
 
+    /* Content Sections */
+    .content-section {
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     /* Card Enhancements */
     .custom-card {
       background: rgba(255, 255, 255, 0.95);
@@ -266,6 +276,59 @@
       animation: fadeIn 0.3s ease-out;
     }
     
+    /* Profile and Username Card Hover Effects */
+    .profile-card:hover,
+    .username-card:hover {
+      transform: translateY(-5px) scale(1.02);
+      box-shadow: 0 15px 35px rgba(59, 130, 246, 0.2);
+      border-color: var(--primary-blue);
+    }
+    
+    .profile-card:hover .bg-primary,
+    .username-card:hover .bg-info {
+      transform: scale(1.1);
+      transition: transform 0.3s ease;
+    }
+    
+    /* Section headers */
+    .section-header {
+      position: relative;
+      padding-bottom: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .section-header::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 50px;
+      height: 3px;
+      background: linear-gradient(135deg, var(--primary-blue), var(--secondary-blue));
+      border-radius: 2px;
+    }
+    
+    /* Badge improvements */
+    .badge {
+      font-weight: 500;
+      border-radius: 0.5rem;
+    }
+    
+    /* Button group for social platforms */
+    .social-platform-buttons .btn {
+      border-radius: 50%;
+      width: 35px;
+      height: 35px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .social-platform-buttons .btn:hover {
+      transform: translateY(-2px) scale(1.1);
+    }
+    
     /* Hover effects */
     .filter-btn:hover {
       transform: translateY(-1px);
@@ -414,28 +477,30 @@
   <div class="main-container" id="mainContent">
     <div class="container-fluid">
 
-      <!-- Dashboard Header -->
-      <div class="row mb-4">
-        <div class="col-12">
-          <div class="custom-card p-4">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <h2 class="mb-1 text-primary">
-                  <i class="fas fa-search-plus me-2"></i>
-                  Multi-Type Investigation Dashboard
-                </h2>
-                <p class="text-muted mb-0">Comprehensive OSINT toolkit for usernames, emails, phones, IPs, and names</p>
-              </div>
-              <div class="text-end">
-                <div class="badge bg-primary fs-6 px-3 py-2">
-                  <i class="fas fa-shield-alt me-2"></i>
-                  Secure Portal
+      <!-- Dashboard Section -->
+      <div id="dashboardSection" class="content-section">
+        <!-- Dashboard Header -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="custom-card p-4">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <h2 class="mb-1 text-primary">
+                    <i class="fas fa-search-plus me-2"></i>
+                    Multi-Type Investigation Dashboard
+                  </h2>
+                  <p class="text-muted mb-0">Comprehensive OSINT toolkit for usernames, emails, phones, IPs, and names</p>
+                </div>
+                <div class="text-end">
+                  <div class="badge bg-primary fs-6 px-3 py-2">
+                    <i class="fas fa-shield-alt me-2"></i>
+                    Secure Portal
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
       <div class="row g-4">
         <div class="col-lg-8">
@@ -602,6 +667,56 @@
           </div>
         </div>
       </div>
+      </div> <!-- End Dashboard Section -->
+
+      <!-- Reports Section -->
+      <div id="reportsSection" class="content-section" style="display: none;">
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="custom-card p-4">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <h2 class="mb-1 text-primary">
+                    <i class="fas fa-chart-bar me-2"></i>
+                    Downloaded Reports
+                  </h2>
+                  <p class="text-muted mb-0">View and manage all your downloaded investigation reports</p>
+                </div>
+                <div class="text-end">
+                  <button class="btn btn-outline-danger btn-sm" onclick="clearAllReports()" style="border-radius: 0.5rem;">
+                    <i class="fas fa-trash me-2"></i>Clear All
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-12">
+            <div class="custom-card p-4">
+              <div id="reportsContainer">
+                <div class="text-center py-5" id="noReportsMessage">
+                  <div class="mb-3">
+                    <i class="fas fa-file-download fa-3x text-muted"></i>
+                  </div>
+                  <h5 class="text-muted">No Reports Yet</h5>
+                  <p class="text-muted">Your downloaded reports will appear here after you export investigation results.</p>
+                  <button class="btn btn-primary" onclick="setActiveSection('dashboard')" style="border-radius: 0.75rem;">
+                    <i class="fas fa-search me-2"></i>Start Investigation
+                  </button>
+                </div>
+                <div id="reportsList" class="d-none">
+                  <!-- Reports will be dynamically added here -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div> <!-- End Reports Section -->
+
+      <!-- Other Sections (Search, History, etc.) will be added here -->
+      
     </div>
   </div>
 
@@ -689,9 +804,34 @@
       document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
         link.classList.remove('active');
       });
+      document.querySelectorAll('.navbar-nav .nav-link').forEach(link => {
+        link.classList.remove('active');
+      });
       
       // Add active class to clicked link
       document.querySelector(`[onclick="setActiveSection('${section}')"]`)?.classList.add('active');
+      
+      // Hide all content sections
+      document.querySelectorAll('.content-section').forEach(sectionEl => {
+        sectionEl.style.display = 'none';
+      });
+      
+      // Show the selected section
+      const targetSection = document.getElementById(section + 'Section');
+      if (targetSection) {
+        targetSection.style.display = 'block';
+      } else {
+        // Default to dashboard if section doesn't exist
+        document.getElementById('dashboardSection').style.display = 'block';
+      }
+      
+      // Special handling for specific sections
+      if (section === 'reports') {
+        loadReports();
+      } else if (section === 'search' || section === 'dashboard') {
+        // Show dashboard content for both dashboard and search
+        document.getElementById('dashboardSection').style.display = 'block';
+      }
       
       // Close sidebar on mobile after selection
       if (window.innerWidth < 992) {
